@@ -70,6 +70,36 @@ services:
       - minio
       - mongodb
 
+  milvus-ocr:
+    container_name: milvus-ocr-standalone
+    image: milvusdb/milvus:v2.5.14
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET_NAME: milvus-ocr
+      MINIO_USE_SSL: "false"
+      MONGO_URI: mongodb://root:example@mongodb:27017
+    ports:
+      - "19531:19530"
+      - "9092:9091"
+    volumes:
+      - milvus_ocr_data:/var/lib/milvus
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      start_period: 90s
+      timeout: 20s
+      retries: 3
+    depends_on:
+      - etcd
+      - minio
+      - mongodb
+
   mongodb:
     container_name: mongodb
     image: mongo:latest
@@ -87,6 +117,7 @@ volumes:
   minio_data:
   milvus_data:
   mongodb_data:
+  milvus_ocr_data:
 
 networks:
   default:

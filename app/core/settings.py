@@ -34,6 +34,15 @@ class KeyFrameIndexMilvusSetting(BaseSettings):
     SEARCH_PARAMS: dict = {}
 
 
+class OcrIndexMilvusSetting(BaseSettings):
+    COLLECTION_NAME: str = "ocr"
+    HOST: str = 'localhost'
+    PORT: str = '19531'
+    METRIC_TYPE: str = 'COSINE'
+    INDEX_TYPE: str = 'FLAT'
+    BATCH_SIZE: int =10000
+    SEARCH_PARAMS: dict = {}
+
 
 class AppSettings(BaseSettings):
     DATA_FOLDER: str  = "/media/tinhanhnguyen/Data3/Projects/HCMAI2025_Baseline/data/keyframe"

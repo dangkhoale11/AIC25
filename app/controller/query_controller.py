@@ -110,5 +110,18 @@ class QueryController:
         return result
     
 
-        
+    async def search_text_with_ocr_filter(
+        self,
+        query: str,
+        ocr_query: str,
+        top_k: int,
+        score_threshold: float
+    ):
+        text_embedding = self.model_service.embedding(query).tolist()[0]
+        ocr_embedding = self.model_service.embedding(ocr_query).tolist()[0]
+
+        result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
+            text_embedding, ocr_embedding, top_k, score_threshold
+        )
+        return result
 
