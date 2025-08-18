@@ -202,4 +202,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-data/
+Data/
+
+
+embedding.pt

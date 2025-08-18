@@ -15,7 +15,6 @@ class MongoDBSettings(BaseSettings):
 
 
 
-
 class IndexPathSettings(BaseSettings):
     FAISS_INDEX_PATH: str | None  
     USEARCH_INDEX_PATH: str | None
@@ -36,6 +35,6 @@ class KeyFrameIndexMilvusSetting(BaseSettings):
 
 
 class AppSettings(BaseSettings):
-    DATA_FOLDER: str  = "/media/tinhanhnguyen/Data3/Projects/HCMAI2025_Baseline/data/keyframe"
-    ID2INDEX_PATH: str = "/media/tinhanhnguyen/Data3/Projects/HCMAI2025_Baseline/data/id2index.json"
+    DATA_FOLDER: str  = "C:/HCMAI2025_Baseline/Data"
+    ID2INDEX_PATH: str = "id2index.json"
     MODEL_NAME: str = "hf-hub:laion/CLIP-convnext_xxlarge-laion2B-s34B-b82K-augreg-soup"
