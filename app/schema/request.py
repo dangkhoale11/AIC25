@@ -22,9 +22,21 @@ class TextSearchWithExcludeGroupsRequest(BaseSearchRequest):
     )
 
 
+from .response import KeyframeServiceReponse
+
+
 class TextSearchWithOcrRequest(BaseSearchRequest):
     """Text search request with OCR filtering"""
     ocr_query: str = Field(..., description="OCR search query text", min_length=1, max_length=1000)
+
+
+class OcrRerankRequest(BaseModel):
+    """Request to re-rank a list of keyframes using an OCR query"""
+    results: List[KeyframeServiceReponse] = Field(..., description="List of keyframe results to re-rank")
+    ocr_query: str = Field(..., description="OCR search query text", min_length=1, max_length=1000)
+    top_k: int = Field(default=10, ge=1, le=500, description="Number of top results to return")
+
+
 class TextSearchWithSelectedGroupsAndVideosRequest(BaseSearchRequest):
     """Text search request with specific group and video selection"""
     include_groups: List[int] = Field(

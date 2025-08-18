@@ -14,5 +14,9 @@ class SingleKeyframeDisplay(BaseModel):
     path: str
     score: float
 
+from typing import List, Optional
+
+
 class KeyframeDisplay(BaseModel):
     results: list[SingleKeyframeDisplay]
+    raw_results: Optional[List[KeyframeServiceReponse]] = None

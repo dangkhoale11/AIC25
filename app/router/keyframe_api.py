@@ -8,6 +8,7 @@ from schema.request import (
     TextSearchWithExcludeGroupsRequest,
     TextSearchWithSelectedGroupsAndVideosRequest,
     TextSearchWithOcrRequest,
+    OcrRerankRequest,
 )
 from schema.response import KeyframeServiceReponse, SingleKeyframeDisplay, KeyframeDisplay
 from controller.query_controller import QueryController
@@ -77,7 +78,41 @@ async def search_keyframes(
             map(controller.convert_model_to_path, results)
         )
     )
-    return KeyframeDisplay(results=display_results)
+    return KeyframeDisplay(results=display_results, raw_results=results)
+
+
+@router.post(
+    "/rerank/ocr",
+    response_model=KeyframeDisplay,
+    summary="Re-rank keyframes with OCR",
+    description="Re-rank a list of keyframes based on an OCR query.",
+    response_description="List of re-ranked keyframes with confidence scores"
+)
+async def rerank_keyframes_with_ocr(
+    request: OcrRerankRequest,
+    controller: QueryController = Depends(get_query_controller)
+):
+    """
+    Re-rank keyframes with OCR filtering.
+    """
+
+    logger.info(f"OCR rerank request: ocr_query='{request.ocr_query}'")
+
+    results = await controller.rerank_with_ocr(
+        results=request.results,
+        ocr_query=request.ocr_query,
+        top_k=request.top_k,
+    )
+
+    logger.info(f"Found {len(results)} results with OCR reranking")
+
+    display_results = list(
+        map(
+            lambda pair: SingleKeyframeDisplay(path=pair[0], score=pair[1]),
+            map(controller.convert_model_to_path, results)
+        )
+    )
+    return KeyframeDisplay(results=display_results, raw_results=results)
 
 
 @router.post(
@@ -133,7 +168,7 @@ async def search_keyframes_with_ocr_filter(
             map(controller.convert_model_to_path, results)
         )
     )
-    return KeyframeDisplay(results=display_results)
+    return KeyframeDisplay(results=display_results, raw_results=results)
 
 @router.post(
     "/search/exclude-groups",
@@ -195,7 +230,7 @@ async def search_keyframes_exclude_groups(
             map(controller.convert_model_to_path, results)
         )
     )
-    return KeyframeDisplay(results=display_results)
+    return KeyframeDisplay(results=display_results, raw_results=results)
 
 
 
@@ -268,7 +303,7 @@ async def search_keyframes_selected_groups_videos(
             map(controller.convert_model_to_path, results)
         )
     )
-    return KeyframeDisplay(results=display_results)
+    return KeyframeDisplay(results=display_results, raw_results=results)
 
     
 
