@@ -22,6 +22,9 @@ class TextSearchWithExcludeGroupsRequest(BaseSearchRequest):
     )
 
 
+class TextSearchWithOcrRequest(BaseSearchRequest):
+    """Text search request with OCR filtering"""
+    ocr_query: str = Field(..., description="OCR search query text", min_length=1, max_length=1000)
 class TextSearchWithSelectedGroupsAndVideosRequest(BaseSearchRequest):
     """Text search request with specific group and video selection"""
     include_groups: List[int] = Field(

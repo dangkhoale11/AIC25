@@ -1,0 +1,17 @@
+[
+    {
+        "id": 0,
+        "content of object": "a person walking",
+        "ocr by text": "some text on a sign"
+    },
+    {
+        "id": 1,
+        "content of object": "a car driving",
+        "ocr by text": "a license plate"
+    },
+    {
+        "id": 2,
+        "content of object": "a dog playing",
+        "ocr by text": "a tag on the collar"
+    }
+]

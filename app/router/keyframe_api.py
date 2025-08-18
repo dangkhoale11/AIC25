@@ -7,6 +7,7 @@ from schema.request import (
     TextSearchRequest,
     TextSearchWithExcludeGroupsRequest,
     TextSearchWithSelectedGroupsAndVideosRequest,
+    TextSearchWithOcrRequest,
 )
 from schema.response import KeyframeServiceReponse, SingleKeyframeDisplay, KeyframeDisplay
 from controller.query_controller import QueryController
@@ -78,9 +79,61 @@ async def search_keyframes(
     )
     return KeyframeDisplay(results=display_results)
 
+
+@router.post(
+    "/search/ocr-filter",
+    response_model=KeyframeDisplay,
+    summary="Text search with OCR filtering",
+    description="""
+    Perform a text-based search for keyframes and then re-rank the results based on an OCR query.
+
+    This endpoint first performs a standard text search and then uses a second query
+    to search the OCR content of the initial results, combining the scores for a final ranking.
+
+    **Parameters:**
+    - **query**: The primary search text
+    - **ocr_query**: The search text for OCR content
+    - **top_k**: Maximum number of results to return
+    - **score_threshold**: Minimum confidence score
     
+    **Example:**
+    ```json
+    {
+        "query": "a person at a table",
+        "ocr_query": "menu",
+        "top_k": 10,
+        "score_threshold": 0.5
+    }
+    ```
+    """,
+    response_description="List of matching keyframes, re-ranked with OCR scores"
+)
+async def search_keyframes_with_ocr_filter(
+    request: TextSearchWithOcrRequest,
+    controller: QueryController = Depends(get_query_controller)
+):
+    """
+    Search for keyframes with OCR filtering.
+    """
 
+    logger.info(f"Text search with OCR filter: query='{request.query}', ocr_query='{request.ocr_query}'")
 
+    results = await controller.search_text_with_ocr_filter(
+        query=request.query,
+        ocr_query=request.ocr_query,
+        top_k=request.top_k,
+        score_threshold=request.score_threshold
+    )
+
+    logger.info(f"Found {len(results)} results with OCR filtering")
+
+    display_results = list(
+        map(
+            lambda pair: SingleKeyframeDisplay(path=pair[0], score=pair[1]),
+            map(controller.convert_model_to_path, results)
+        )
+    )
+    return KeyframeDisplay(results=display_results)
 
 @router.post(
     "/search/exclude-groups",

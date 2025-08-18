@@ -8,7 +8,7 @@ ROOT_DIR = os.path.abspath(
 sys.path.insert(0, ROOT_DIR)
 
 
-from repository.milvus import KeyframeVectorRepository
+from repository.milvus import KeyframeVectorRepository, OcrVectorRepository
 from repository.milvus import MilvusSearchRequest
 from repository.mongo import KeyframeRepository
 
@@ -19,11 +19,13 @@ class KeyframeQueryService:
             self, 
             keyframe_vector_repo: KeyframeVectorRepository,
             keyframe_mongo_repo: KeyframeRepository,
+            ocr_vector_repo: OcrVectorRepository,
             
         ):
 
         self.keyframe_vector_repo = keyframe_vector_repo
         self.keyframe_mongo_repo= keyframe_mongo_repo
+        self.ocr_vector_repo = ocr_vector_repo
 
 
     async def _retrieve_keyframes(self, ids: list[int]):
@@ -130,33 +132,43 @@ class KeyframeQueryService:
         return await self._search_keyframes(text_embedding, top_k, score_threshold, exclude_ids)   
     
 
+    async def search_by_text_and_filter_with_ocr(
+        self,
+        text_embedding: list[float],
+        ocr_embedding: list[float],
+        top_k: int,
+        score_threshold: float | None,
+    ):
+        # 1. Initial search on keyframes
+        initial_results = await self._search_keyframes(text_embedding, top_k, score_threshold, None)
+        initial_ids = [result.key for result in initial_results]
 
-    
+        if not initial_ids:
+            return []
 
-
-
-
-    
+        # 2. Re-rank based on OCR search
+        search_request = MilvusSearchRequest(
+            embedding=ocr_embedding,
+            top_k=top_k
+        )
         
+        ocr_search_response = await self.ocr_vector_repo.search_by_embedding_and_ids(search_request, initial_ids)
 
+        # 3. Create a map of id -> ocr_score
+        ocr_scores = {result.id_: result.distance for result in ocr_search_response.results}
 
+        # 4. Combine and re-sort results
+        combined_results = []
+        for result in initial_results:
+            ocr_score = ocr_scores.get(result.key, 0.0)
+            # a simple average, can be replaced with more sophisticated weighting
+            combined_score = (result.confidence_score + ocr_score) / 2.0
+            result.confidence_score = combined_score
+            combined_results.append(result)
 
-        
+        # 5. Sort by the new combined score
+        sorted_results = sorted(
+            combined_results, key=lambda r: r.confidence_score, reverse=True
+        )
 
-        
-
-        
-        
-        
-
-
-        
-
-        
-
-
-
-
-
-
-
+        return sorted_results

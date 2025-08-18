@@ -11,7 +11,7 @@ sys.path.insert(0, ROOT_DIR)
 
 
 from repository.mongo import KeyframeRepository
-from repository.milvus import KeyframeVectorRepository
+from repository.milvus import KeyframeVectorRepository, OcrVectorRepository
 from service import KeyframeQueryService, ModelService
 from models.keyframe import Keyframe
 import open_clip
@@ -27,9 +27,16 @@ class ServiceFactory:
         milvus_user: str ,
         milvus_password: str ,
         milvus_search_params: dict,
+        ocr_milvus_collection_name: str,
+        ocr_milvus_host: str,
+        ocr_milvus_port: str,
+        ocr_milvus_user: str,
+        ocr_milvus_password: str,
+        ocr_milvus_search_params: dict,
         model_name: str ,
         milvus_db_name: str = "default",
         milvus_alias: str = "default",
+        ocr_milvus_alias: str = "ocr",
         mongo_collection=Keyframe,
     ):
         self._mongo_keyframe_repo = KeyframeRepository(collection=mongo_collection)
@@ -44,11 +51,23 @@ class ServiceFactory:
             alias=milvus_alias
         )
 
+        self._milvus_ocr_repo = self._init_milvus_ocr_repo(
+            search_params=ocr_milvus_search_params,
+            collection_name=ocr_milvus_collection_name,
+            host=ocr_milvus_host,
+            port=ocr_milvus_port,
+            user=ocr_milvus_user,
+            password=ocr_milvus_password,
+            db_name=milvus_db_name,
+            alias=ocr_milvus_alias
+        )
+
         self._model_service = self._init_model_service(model_name)
 
         self._keyframe_query_service = KeyframeQueryService(
             keyframe_mongo_repo=self._mongo_keyframe_repo,
-            keyframe_vector_repo=self._milvus_keyframe_repo
+            keyframe_vector_repo=self._milvus_keyframe_repo,
+            ocr_vector_repo=self._milvus_ocr_repo
         )
 
     def _init_milvus_repo(
@@ -80,6 +99,35 @@ class ServiceFactory:
 
         return KeyframeVectorRepository(collection=collection, search_params=search_params)
 
+    def _init_milvus_ocr_repo(
+        self,
+        search_params: dict,
+        collection_name: str,
+        host: str,
+        port: str,
+        user: str,
+        password: str,
+        db_name: str = "default",
+        alias: str = "ocr"
+    ):
+        if connections.has_connection(alias):
+            connections.remove_connection(alias)
+
+        conn_params = {
+            "host": host,
+            "port": port,
+            "db_name": db_name
+        }
+
+        if user and password:
+            conn_params["user"] = user
+            conn_params["password"] = password
+
+        connections.connect(alias=alias, **conn_params)
+        collection = MilvusCollection(collection_name, using=alias)
+
+        return OcrVectorRepository(collection=collection, search_params=search_params)
+
     def _init_model_service(self, model_name: str):
         model, _, preprocess = open_clip.create_model_and_transforms(model_name)
         tokenizer = open_clip.get_tokenizer(model_name)
@@ -90,6 +138,9 @@ class ServiceFactory:
 
     def get_milvus_keyframe_repo(self):
         return self._milvus_keyframe_repo
+
+    def get_milvus_ocr_repo(self):
+        return self._milvus_ocr_repo
 
     def get_model_service(self):
         return self._model_service

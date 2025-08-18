@@ -15,7 +15,7 @@ ROOT_DIR = os.path.abspath(
 sys.path.insert(0, ROOT_DIR)
 
 
-from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting, AppSettings
+from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting, OcrIndexMilvusSetting, AppSettings
 from models.keyframe import Keyframe
 from factory.factory import ServiceFactory
 from core.logger import SimpleLogger
@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
     try:
         mongo_settings = MongoDBSettings()
         milvus_settings = KeyFrameIndexMilvusSetting()
+        ocr_milvus_settings = OcrIndexMilvusSetting()
         appsetting = AppSettings()
         global mongo_client
         mongo_connection_string = (
@@ -59,6 +60,11 @@ async def lifespan(app: FastAPI):
             "metric_type": milvus_settings.METRIC_TYPE,
             "params": milvus_settings.SEARCH_PARAMS
         }
+
+        ocr_milvus_search_params = {
+            "metric_type": ocr_milvus_settings.METRIC_TYPE,
+            "params": ocr_milvus_settings.SEARCH_PARAMS
+        }
         
         service_factory = ServiceFactory(
             milvus_collection_name=milvus_settings.COLLECTION_NAME,
@@ -67,6 +73,12 @@ async def lifespan(app: FastAPI):
             milvus_user="",  
             milvus_password="",  
             milvus_search_params=milvus_search_params,
+            ocr_milvus_collection_name=ocr_milvus_settings.COLLECTION_NAME,
+            ocr_milvus_host=ocr_milvus_settings.HOST,
+            ocr_milvus_port=ocr_milvus_settings.PORT,
+            ocr_milvus_user="",
+            ocr_milvus_password="",
+            ocr_milvus_search_params=ocr_milvus_search_params,
             model_name=appsetting.MODEL_NAME,
             mongo_collection=Keyframe
         )
