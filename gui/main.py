@@ -80,6 +80,8 @@ st.markdown("""
 # Initialize session state
 if 'search_results' not in st.session_state:
     st.session_state.search_results = []
+if 'raw_search_results' not in st.session_state:
+    st.session_state.raw_search_results = []
 if 'api_base_url' not in st.session_state:
     st.session_state.api_base_url = "http://localhost:8000"
 
@@ -243,6 +245,7 @@ if st.button("🚀 Search", use_container_width=True):
                 if response.status_code == 200:
                     data = response.json()
                     st.session_state.search_results = data.get("results", [])
+                    st.session_state.raw_search_results = data.get("raw_results", [])
                     st.success(f"✅ Found {len(st.session_state.search_results)} results!")
                 else:
                     st.error(f"❌ API Error: {response.status_code} - {response.text}")
@@ -256,6 +259,43 @@ if st.button("🚀 Search", use_container_width=True):
 if st.session_state.search_results:
     st.markdown("---")
     st.markdown("## 📋 Search Results")
+
+    if st.session_state.raw_search_results:
+        st.markdown("### 📝 OCR Rerank")
+        rerank_ocr_query = st.text_input(
+            "OCR Rerank Query",
+            placeholder="Enter search query for OCR content to rerank",
+            help="Enter 1-1000 characters to search in OCR text"
+        )
+        if st.button("🔄 Rerank with OCR", use_container_width=True):
+            if not rerank_ocr_query.strip():
+                st.error("Please enter an OCR query to rerank")
+            else:
+                with st.spinner("🔄 Reranking results with OCR..."):
+                    try:
+                        endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/rerank/ocr"
+                        payload = {
+                            "results": st.session_state.raw_search_results,
+                            "ocr_query": rerank_ocr_query,
+                            "top_k": top_k
+                        }
+                        response = requests.post(
+                            endpoint,
+                            json=payload,
+                            headers={"Content-Type": "application/json"},
+                            timeout=30
+                        )
+                        if response.status_code == 200:
+                            data = response.json()
+                            st.session_state.search_results = data.get("results", [])
+                            st.success(f"✅ Reranked and found {len(st.session_state.search_results)} results!")
+                        else:
+                            st.error(f"❌ API Error: {response.status_code} - {response.text}")
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"❌ Connection Error: {str(e)}")
+                    except Exception as e:
+                        st.error(f"❌ Unexpected Error: {str(e)}")
+
     
     # Results summary
     col_metric1, col_metric2, col_metric3 = st.columns(3)

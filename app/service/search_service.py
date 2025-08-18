@@ -141,10 +141,20 @@ class KeyframeQueryService:
     ):
         # 1. Initial search on keyframes
         initial_results = await self._search_keyframes(text_embedding, top_k, score_threshold, None)
-        initial_ids = [result.key for result in initial_results]
 
-        if not initial_ids:
+        if not initial_results:
             return []
+
+        return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k)
+
+
+    async def rerank_by_ocr(
+        self,
+        initial_results: list[KeyframeServiceReponse],
+        ocr_embedding: list[float],
+        top_k: int,
+    ):
+        initial_ids = [result.key for result in initial_results]
 
         # 2. Re-rank based on OCR search
         search_request = MilvusSearchRequest(
