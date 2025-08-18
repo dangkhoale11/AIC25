@@ -74,7 +74,47 @@ class KeyframeVectorRepository(MilvusBaseRepository):
         return list(range(self.collection.num_entities))
 
 
+class OcrVectorRepository(MilvusBaseRepository):
+    def __init__(
+        self,
+        collection: MilvusCollection,
+        search_params: dict
+    ):
 
+        super().__init__(collection)
+        self.search_params = search_params
     
-    
+    async def search_by_embedding_and_ids(
+        self,
+        request: MilvusSearchRequest,
+        ids: list[int]
+    ):
+        expr = f"id in {ids}"
+        if request.exclude_ids:
+            expr = f"id in {ids} and id not in {request.exclude_ids}"
+
+        search_results= cast(SearchResult, self.collection.search(
+            data=[request.embedding],
+            anns_field="embedding",
+            param=self.search_params,
+            limit=request.top_k,
+            expr=expr ,
+            output_fields=["id", "embedding"],
+            _async=False
+        ))
+
+        results = []
+        for hits in search_results:
+            for hit in hits:
+                result = MilvusSearchResult(
+                    id_=hit.id,
+                    distance=hit.distance,
+                    embedding=hit.entity.get("embedding") if hasattr(hit, 'entity') else None
+                )
+                results.append(result)
+
+        return MilvusSearchResponse(
+            results=results,
+            total_found=len(results),
+        )
 

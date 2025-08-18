@@ -126,12 +126,19 @@ with col2:
     st.markdown("### 🎛️ Search Mode")
     search_mode = st.selectbox(
         "Mode",
-        options=["Default", "Exclude Groups", "Include Groups & Videos"],
+        options=["Default", "Exclude Groups", "Include Groups & Videos", "Search with OCR filter"],
         help="Choose how to filter your search results"
     )
 
 # Mode-specific parameters
-if search_mode == "Exclude Groups":
+if search_mode == "Search with OCR filter":
+    st.markdown("### 📝 OCR Filter")
+    ocr_query = st.text_input(
+        "OCR Search Query",
+        placeholder="Enter search query for OCR content",
+        help="Enter 1-1000 characters to search in OCR text"
+    )
+elif search_mode == "Exclude Groups":
     st.markdown("### 🚫 Exclude Groups")
     exclude_groups_input = st.text_input(
         "Group IDs to exclude",
@@ -198,6 +205,14 @@ if st.button("🚀 Search", use_container_width=True):
                         "score_threshold": score_threshold
                     }
                 
+                elif search_mode == "Search with OCR filter":
+                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/ocr-filter"
+                    payload = {
+                        "query": query,
+                        "ocr_query": ocr_query,
+                        "top_k": top_k,
+                        "score_threshold": score_threshold
+                    }
                 elif search_mode == "Exclude Groups":
                     endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
                     payload = {
