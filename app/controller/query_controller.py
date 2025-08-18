@@ -13,6 +13,7 @@ sys.path.insert(0, ROOT_DIR)
 
 from service import ModelService, KeyframeQueryService
 from schema.response import KeyframeServiceReponse
+from core.translation import TextTranslator
 
 
 class QueryController:
@@ -28,6 +29,7 @@ class QueryController:
         self.id2index = json.load(open(id2index_path, 'r'))
         self.model_service = model_service
         self.keyframe_service = keyframe_service
+        self.translator = TextTranslator()
 
     
     def convert_model_to_path(
@@ -43,7 +45,8 @@ class QueryController:
         top_k: int,
         score_threshold: float
     ):
-        embedding = self.model_service.embedding(query).tolist()[0]
+        translated_query = self.translator.translate(query)
+        embedding = self.model_service.embedding(translated_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text(embedding, top_k, score_threshold)
         return result
@@ -63,7 +66,8 @@ class QueryController:
 
         
         
-        embedding = self.model_service.embedding(query).tolist()[0]
+        translated_query = self.translator.translate(query)
+        embedding = self.model_service.embedding(translated_query).tolist()[0]
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
         return result
 
@@ -105,7 +109,8 @@ class QueryController:
 
 
 
-        embedding = self.model_service.embedding(query).tolist()[0]
+        translated_query = self.translator.translate(query)
+        embedding = self.model_service.embedding(translated_query).tolist()[0]
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
         return result
     
@@ -117,11 +122,27 @@ class QueryController:
         top_k: int,
         score_threshold: float
     ):
-        text_embedding = self.model_service.embedding(query).tolist()[0]
-        ocr_embedding = self.model_service.embedding(ocr_query).tolist()[0]
+        translated_query = self.translator.translate(query)
+        translated_ocr_query = self.translator.translate(ocr_query)
+        text_embedding = self.model_service.embedding(translated_query).tolist()[0]
+        ocr_embedding = self.model_service.embedding(translated_ocr_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
             text_embedding, ocr_embedding, top_k, score_threshold
         )
         return result
 
+
+    async def rerank_with_ocr(
+        self,
+        results: list[KeyframeServiceReponse],
+        ocr_query: str,
+        top_k: int,
+    ):
+        translated_ocr_query = self.translator.translate(ocr_query)
+        ocr_embedding = self.model_service.embedding(translated_ocr_query).tolist()[0]
+
+        result = await self.keyframe_service.rerank_by_ocr(
+            results, ocr_embedding, top_k
+        )
+        return result
