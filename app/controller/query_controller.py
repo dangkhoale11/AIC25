@@ -128,7 +128,8 @@ class QueryController:
         query: str,
         ocr_query: str,
         top_k: int,
-        score_threshold: float
+        score_threshold: float,
+        ocr_weight: float,
     ):
         translated_query = self.translator.translate(query)
         translated_ocr_query = self.translator.translate(ocr_query)
@@ -136,7 +137,7 @@ class QueryController:
         ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
-            text_embedding, ocr_embedding, top_k, score_threshold
+            text_embedding, ocr_embedding, top_k, score_threshold, ocr_weight
         )
         return result
 
@@ -146,11 +147,12 @@ class QueryController:
         results: list[KeyframeServiceReponse],
         ocr_query: str,
         top_k: int,
+        ocr_weight: float,
     ):
         translated_ocr_query = self.translator.translate(ocr_query)
         ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()[0]
 
         result = await self.keyframe_service.rerank_by_ocr(
-            results, ocr_embedding, top_k
+            results, ocr_embedding, top_k, ocr_weight
         )
         return result
