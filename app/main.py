@@ -13,7 +13,6 @@ from core.logger import SimpleLogger
 
 logger = SimpleLogger(__name__)
 
-
 app = FastAPI(
     title="Keyframe Search API",
     description="""

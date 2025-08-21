@@ -52,8 +52,10 @@ class QueryController:
     ):
         translated_query = self.translator.translate(query)
         embedding = self.model_service.embedding(translated_query).tolist()[0]
-
+        print(translated_query)
+        print(f'Embedding: {embedding}')
         result = await self.keyframe_service.search_by_text(embedding, top_k, score_threshold)
+        print(result)
         return result
 
 
@@ -115,6 +117,7 @@ class QueryController:
 
 
         translated_query = self.translator.translate(query)
+        print(translated_query)
         embedding = self.model_service.embedding(translated_query).tolist()[0]
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
         return result
@@ -130,7 +133,7 @@ class QueryController:
         translated_query = self.translator.translate(query)
         translated_ocr_query = self.translator.translate(ocr_query)
         text_embedding = self.model_service.embedding(translated_query).tolist()[0]
-        ocr_embedding = self.model_service.embedding(translated_ocr_query).tolist()[0]
+        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
             text_embedding, ocr_embedding, top_k, score_threshold
@@ -145,7 +148,7 @@ class QueryController:
         top_k: int,
     ):
         translated_ocr_query = self.translator.translate(ocr_query)
-        ocr_embedding = self.model_service.embedding(translated_ocr_query).tolist()[0]
+        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()[0]
 
         result = await self.keyframe_service.rerank_by_ocr(
             results, ocr_embedding, top_k

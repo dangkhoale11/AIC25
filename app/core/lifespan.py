@@ -80,6 +80,7 @@ async def lifespan(app: FastAPI):
             ocr_milvus_password="",
             ocr_milvus_search_params=ocr_milvus_search_params,
             model_name=appsetting.MODEL_NAME,
+            model_ocr_name=appsetting.MODEL_OCR_NAME,
             mongo_collection=Keyframe
         )
         logger.info("Service factory initialized successfully")

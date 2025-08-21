@@ -20,7 +20,7 @@ from pymilvus import Collection as MilvusCollection
 from pymilvus.client.search_result import SearchResult
 from schema.interface import  MilvusSearchRequest, MilvusSearchResult, MilvusSearchResponse
 
-
+import asyncio
 
 
 
@@ -35,7 +35,8 @@ class KeyframeVectorRepository(MilvusBaseRepository):
         
         super().__init__(collection)
         self.search_params = search_params
-    
+
+
     async def search_by_embedding(
         self,
         request: MilvusSearchRequest
@@ -43,17 +44,19 @@ class KeyframeVectorRepository(MilvusBaseRepository):
         expr = None
         if request.exclude_ids:
             expr = f"id not in {request.exclude_ids}"
-        
-        search_results= cast(SearchResult, self.collection.search(
-            data=[request.embedding],
-            anns_field="embedding",
-            param=self.search_params,
-            limit=request.top_k,
-            expr=expr ,
-            output_fields=["id", "embedding"],
-            _async=False
-        ))
+        print('FOR DEBUGGING search_by_embedding')
+        def _do_search():
+            return cast(SearchResult, self.collection.search(
+                data=[request.embedding],
+                anns_field="embedding",
+                param=self.search_params,
+                limit=request.top_k,
+                expr=expr,
+                output_fields=["id", "embedding"],
+                _async=False
+            ))
 
+        search_results = await asyncio.to_thread(_do_search)
 
         results = []
         for hits in search_results:
@@ -64,6 +67,7 @@ class KeyframeVectorRepository(MilvusBaseRepository):
                     embedding=hit.entity.get("embedding") if hasattr(hit, 'entity') else None
                 )
                 results.append(result)
+
         
         return MilvusSearchResponse(
             results=results,

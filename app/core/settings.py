@@ -47,3 +47,4 @@ class AppSettings(BaseSettings):
     DATA_FOLDER: str  = "C:/HCMAI2025_Baseline/Data"
     ID2INDEX_PATH: str = "id2index.json"
     MODEL_NAME: str = "hf-hub:laion/CLIP-convnext_xxlarge-laion2B-s34B-b82K-augreg-soup"
+    MODEL_OCR_NAME: str = "all-MiniLM-L6-v2"

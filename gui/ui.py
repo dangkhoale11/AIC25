@@ -83,7 +83,7 @@ if 'search_results' not in st.session_state:
 if 'raw_search_results' not in st.session_state:
     st.session_state.raw_search_results = []
 if 'api_base_url' not in st.session_state:
-    st.session_state.api_base_url = "http://localhost:8000"
+    st.session_state.api_base_url = "http://127.0.0.1:8000"
 
 # Header
 st.markdown("""

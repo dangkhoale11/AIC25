@@ -1,5 +1,6 @@
 import os
 import sys
+from sentence_transformers import SentenceTransformer
 ROOT_DIR = os.path.abspath(
     os.path.join(
         os.path.dirname(__file__), '../'
@@ -34,6 +35,7 @@ class ServiceFactory:
         ocr_milvus_password: str,
         ocr_milvus_search_params: dict,
         model_name: str ,
+        model_ocr_name: str,
         milvus_db_name: str = "default",
         milvus_alias: str = "default",
         ocr_milvus_alias: str = "ocr",
@@ -62,7 +64,7 @@ class ServiceFactory:
             alias=ocr_milvus_alias
         )
 
-        self._model_service = self._init_model_service(model_name)
+        self._model_service = self._init_model_service(model_name, model_ocr_name)
 
         self._keyframe_query_service = KeyframeQueryService(
             keyframe_mongo_repo=self._mongo_keyframe_repo,
@@ -128,10 +130,11 @@ class ServiceFactory:
 
         return OcrVectorRepository(collection=collection, search_params=search_params)
 
-    def _init_model_service(self, model_name: str):
+    def _init_model_service(self, model_name: str, model_ocr_name: str):
         model, _, preprocess = open_clip.create_model_and_transforms(model_name)
         tokenizer = open_clip.get_tokenizer(model_name)
-        return ModelService(model=model, preprocess=preprocess, tokenizer=tokenizer)
+        model_ocr = SentenceTransformer(model_ocr_name)
+        return ModelService(model=model,model_ocr=model_ocr, preprocess=preprocess, tokenizer=tokenizer)
 
     def get_mongo_keyframe_repo(self):
         return self._mongo_keyframe_repo

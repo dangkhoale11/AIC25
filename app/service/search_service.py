@@ -30,7 +30,7 @@ class KeyframeQueryService:
 
     async def _retrieve_keyframes(self, ids: list[int]):
         keyframes = await self.keyframe_mongo_repo.get_keyframe_by_list_of_keys(ids)
-
+        print(keyframes[:5])
   
         keyframe_map = {k.key: k for k in keyframes}
         return_keyframe = [
@@ -51,7 +51,7 @@ class KeyframeQueryService:
             top_k=top_k,
             exclude_ids=exclude_indices
         )
-
+        print('FOR DEBUGGING _search_keyframes')
         search_response = await self.keyframe_vector_repo.search_by_embedding(search_request)
 
         
@@ -94,6 +94,7 @@ class KeyframeQueryService:
         top_k: int,
         score_threshold: float | None = 0.5,
     ):
+        print('FOR DEBUGGING search_by_text')
         return await self._search_keyframes(text_embedding, top_k, score_threshold, None)   
     
 

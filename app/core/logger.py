@@ -1,8 +1,10 @@
+import logging
 import logging.handlers
+import sys
 from pathlib import Path
 
 class SimpleLogger:
-    """Simple logger with console and file output."""
+    """Simple logger with console and file output (UTF-8 safe)."""
     
     def __init__(
         self,
@@ -17,7 +19,8 @@ class SimpleLogger:
         
         Path(log_dir).mkdir(exist_ok=True)
         
-        console_handler = logging.StreamHandler()
+        # Console Handler (force UTF-8)
+        console_handler = logging.StreamHandler(sys.stdout)
         console_handler.setLevel(getattr(logging, console_level))
         console_format = logging.Formatter(
             '\033[36m%(asctime)s\033[0m | \033[32m%(levelname)-8s\033[0m | %(name)s | %(funcName)s:%(lineno)d | %(message)s',
@@ -26,10 +29,12 @@ class SimpleLogger:
         console_handler.setFormatter(console_format)
         self.logger.addHandler(console_handler)
         
+        # File Handler (with UTF-8)
         file_handler = logging.handlers.RotatingFileHandler(
             f"{log_dir}/{name}.log",
             maxBytes=10*1024*1024,  
-            backupCount=3
+            backupCount=3,
+            encoding="utf-8"  # 👈 quan trọng
         )
         file_handler.setLevel(getattr(logging, file_level))
         file_format = logging.Formatter(
