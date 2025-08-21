@@ -226,7 +226,7 @@ if st.button("🚀 Search", use_container_width=True):
                         "exclude_groups": exclude_groups
                     }
                 
-                else:  # Include Groups & Videos
+                elif search_mode == 'Include Groups & Videos':  # Include Groups & Videos
                     endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
                     payload = {
                         "query": query,
