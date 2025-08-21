@@ -140,6 +140,7 @@ if search_mode == "Search with OCR filter":
         placeholder="Enter search query for OCR content",
         help="Enter 1-1000 characters to search in OCR text"
     )
+    ocr_weight = st.slider("⚖️ OCR Weight", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
 elif search_mode == "Exclude Groups":
     st.markdown("### 🚫 Exclude Groups")
     exclude_groups_input = st.text_input(
@@ -213,7 +214,8 @@ if st.button("🚀 Search", use_container_width=True):
                         "query": query,
                         "ocr_query": ocr_query,
                         "top_k": top_k,
-                        "score_threshold": score_threshold
+                        "score_threshold": score_threshold,
+                        "ocr_weight": ocr_weight
                     }
                 elif search_mode == "Exclude Groups":
                     endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
@@ -267,6 +269,7 @@ if st.session_state.search_results:
             placeholder="Enter search query for OCR content to rerank",
             help="Enter 1-1000 characters to search in OCR text"
         )
+        rerank_ocr_weight = st.slider("⚖️ OCR Rerank Weight", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
         if st.button("🔄 Rerank with OCR", use_container_width=True):
             if not rerank_ocr_query.strip():
                 st.error("Please enter an OCR query to rerank")
@@ -277,7 +280,8 @@ if st.session_state.search_results:
                         payload = {
                             "results": st.session_state.raw_search_results,
                             "ocr_query": rerank_ocr_query,
-                            "top_k": top_k
+                            "top_k": top_k,
+                            "ocr_weight": rerank_ocr_weight
                         }
                         response = requests.post(
                             endpoint,

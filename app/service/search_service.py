@@ -139,6 +139,7 @@ class KeyframeQueryService:
         ocr_embedding: list[float],
         top_k: int,
         score_threshold: float | None,
+        ocr_weight: float = 0.5,
     ):
         # 1. Initial search on keyframes
         initial_results = await self._search_keyframes(text_embedding, top_k, score_threshold, None)
@@ -146,7 +147,7 @@ class KeyframeQueryService:
         if not initial_results:
             return []
 
-        return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k)
+        return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k, ocr_weight)
 
 
     async def rerank_by_ocr(
@@ -154,6 +155,7 @@ class KeyframeQueryService:
         initial_results: list[KeyframeServiceReponse],
         ocr_embedding: list[float],
         top_k: int,
+        ocr_weight: float,
     ):
         initial_ids = [result.key for result in initial_results]
 
@@ -173,7 +175,7 @@ class KeyframeQueryService:
         for result in initial_results:
             ocr_score = ocr_scores.get(result.key, 0.0)
             # a simple average, can be replaced with more sophisticated weighting
-            combined_score = (result.confidence_score + ocr_score) / 2.0
+            combined_score = (1 - ocr_weight) * result.confidence_score + ocr_weight * ocr_score
             result.confidence_score = combined_score
             combined_results.append(result)
 

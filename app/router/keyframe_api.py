@@ -102,6 +102,7 @@ async def rerank_keyframes_with_ocr(
         results=request.results,
         ocr_query=request.ocr_query,
         top_k=request.top_k,
+        ocr_weight=request.ocr_weight,
     )
 
     logger.info(f"Found {len(results)} results with OCR reranking")
@@ -130,6 +131,7 @@ async def rerank_keyframes_with_ocr(
     - **ocr_query**: The search text for OCR content
     - **top_k**: Maximum number of results to return
     - **score_threshold**: Minimum confidence score
+    - **ocr_weight**: Weight for OCR score in re-ranking (0.0-1.0, default: 0.5)
     
     **Example:**
     ```json
@@ -137,7 +139,8 @@ async def rerank_keyframes_with_ocr(
         "query": "a person at a table",
         "ocr_query": "menu",
         "top_k": 10,
-        "score_threshold": 0.5
+        "score_threshold": 0.5,
+        "ocr_weight": 0.7
     }
     ```
     """,
@@ -157,7 +160,8 @@ async def search_keyframes_with_ocr_filter(
         query=request.query,
         ocr_query=request.ocr_query,
         top_k=request.top_k,
-        score_threshold=request.score_threshold
+        score_threshold=request.score_threshold,
+        ocr_weight=request.ocr_weight,
     )
 
     logger.info(f"Found {len(results)} results with OCR filtering")

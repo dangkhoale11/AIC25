@@ -28,6 +28,7 @@ from .response import KeyframeServiceReponse
 class TextSearchWithOcrRequest(BaseSearchRequest):
     """Text search request with OCR filtering"""
     ocr_query: str = Field(..., description="OCR search query text", min_length=1, max_length=1000)
+    ocr_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for OCR score in re-ranking")
 
 
 class OcrRerankRequest(BaseModel):
@@ -35,6 +36,7 @@ class OcrRerankRequest(BaseModel):
     results: List[KeyframeServiceReponse] = Field(..., description="List of keyframe results to re-rank")
     ocr_query: str = Field(..., description="OCR search query text", min_length=1, max_length=1000)
     top_k: int = Field(default=10, ge=1, le=500, description="Number of top results to return")
+    ocr_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for OCR score in re-ranking")
 
 
 class TextSearchWithSelectedGroupsAndVideosRequest(BaseSearchRequest):
