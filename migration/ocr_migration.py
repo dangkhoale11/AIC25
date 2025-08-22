@@ -57,10 +57,10 @@ class MilvusOcrInjector:
         print(f"Connected to Milvus at {host}:{port}")
 
 
-
     def create_collection(self, embedding_dim: int, index_params: Optional[dict] = None):
         fields = [
-            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=False),
+            FieldSchema(name="id", dtype=DataType.INT64, is_primary=True, auto_id=True),
+            FieldSchema(name="keyframe_id", dtype=DataType.VARCHAR, max_length=200),
             FieldSchema(name="embedding", dtype=DataType.FLOAT_VECTOR, dim=embedding_dim)
         ]
 
@@ -81,37 +81,41 @@ class MilvusOcrInjector:
         return collection
 
     def inject_ocr_data(
-        self,
-        json_file_path: str,
-        batch_size: int = 100,
-        model_name: str = 'all-MiniLM-L6-v2'
+        self, 
+        embedding_file_path: str, 
+        batch_size: int = 1000,
     ):
-        print(f"Loading data from {json_file_path}")
-        with open(json_file_path, 'r') as f:
-            data = json.load(f)
+        print(f"Loading embeddings from {embedding_file_path}")
 
-        model = SentenceTransformer(model_name)
+        embeddings = None
+        ids = None
 
-        texts = []
-        ids = []
-        for item in data:
-            content = item.get("content of object", "")
-            ocr = item.get("ocr by text", "")
-            combined_text = f"{content} {ocr}".strip()
-            if combined_text:
-                texts.append(combined_text)
-                ids.append(item["id"])
+        if embedding_file_path.endswith(".pkl"):
+            import pickle
+            with open(embedding_file_path, "rb") as f:
+                data = pickle.load(f)
 
-        if not texts:
-            print("No text found to embed.")
-            return
+            # data: list of dict
+            ids = [item["keyframe_id"] for item in data]
+            embeddings = np.array([item["embedding"] for item in data], dtype=np.float32)
 
-        print(f"Generating embeddings for {len(texts)} texts...")
-        embeddings = model.encode(texts, show_progress_bar=True)
+        else:  # torch tensor file (.pt, .pth)
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            embeddings = torch.load(
+                embedding_file_path,
+                map_location=device,
+                weights_only=False
+            )
+            if isinstance(embeddings, torch.Tensor):
+                embeddings = embeddings.cpu().numpy()
+            if embeddings.ndim == 1:
+                embeddings = embeddings.reshape(1, -1)
+            ids = list(range(len(embeddings)))
 
         num_vectors, embedding_dim = embeddings.shape
-        print(f"Generated {num_vectors} embeddings with dimension {embedding_dim}")
+        print(f"Loaded {num_vectors} embeddings with dimension {embedding_dim}")
 
+        # Nếu collection tồn tại thì drop
         if utility.has_collection(self.collection_name, using=self.alias):
             print(f"Dropping existing collection '{self.collection_name}' before creation...")
             utility.drop_collection(self.collection_name, using=self.alias)
@@ -119,7 +123,6 @@ class MilvusOcrInjector:
         collection = self.create_collection(embedding_dim)
 
         print(f"Inserting {num_vectors} embeddings in batches of {batch_size}")
-
         for i in tqdm(range(0, num_vectors, batch_size), desc="Inserting batches"):
             end_idx = min(i + batch_size, num_vectors)
             batch_embeddings = embeddings[i:end_idx].tolist()
@@ -150,7 +153,7 @@ class MilvusOcrInjector:
 
 
 def inject_ocr_data_simple(
-    json_file_path: str,
+    embedding_file_path: str,
     setting: OcrIndexMilvusSetting
 ):
     injector = MilvusOcrInjector(
@@ -162,7 +165,7 @@ def inject_ocr_data_simple(
     )
 
     injector.inject_ocr_data(
-        json_file_path=json_file_path,
+        embedding_file_path=embedding_file_path,
         batch_size=setting.BATCH_SIZE
     )
     count = injector.get_collection_info()
@@ -174,12 +177,12 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Migrate OCR data to Milvus.")
     parser.add_argument(
-        "--file_path", type=str, help="Path to data json."
+        "--file_path", type=str, help="Path to data."
     )
     args = parser.parse_args()
 
     setting =  OcrIndexMilvusSetting()
     inject_ocr_data_simple(
-        json_file_path=args.file_path,
+        embedding_file_path=args.file_path,
         setting=setting
     )

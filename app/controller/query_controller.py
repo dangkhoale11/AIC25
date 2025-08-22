@@ -50,12 +50,9 @@ class QueryController:
         top_k: int,
         score_threshold: float
     ):
-        translated_query = self.translator.translate(query)
-        embedding = self.model_service.embedding(translated_query).tolist()[0]
-        print(translated_query)
-        print(f'Embedding: {embedding}')
+        embedding = self.model_service.embedding(query).tolist()[0]
+
         result = await self.keyframe_service.search_by_text(embedding, top_k, score_threshold)
-        print(result)
         return result
 
 
@@ -73,8 +70,7 @@ class QueryController:
 
         
         
-        translated_query = self.translator.translate(query)
-        embedding = self.model_service.embedding(translated_query).tolist()[0]
+        embedding = self.model_service.embedding(query).tolist()[0]
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
         return result
 
@@ -116,11 +112,12 @@ class QueryController:
 
 
 
-        translated_query = self.translator.translate(query)
-        print(translated_query)
-        embedding = self.model_service.embedding(translated_query).tolist()[0]
+        embedding = self.model_service.embedding(query).tolist()[0]
+        # print(exclude_ids)
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
         return result
+    
+
     
 
     async def search_text_with_ocr_filter(
@@ -134,7 +131,7 @@ class QueryController:
         translated_query = self.translator.translate(query)
         translated_ocr_query = self.translator.translate(ocr_query)
         text_embedding = self.model_service.embedding(translated_query).tolist()[0]
-        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()[0]
+        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
         result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
             text_embedding, ocr_embedding, top_k, score_threshold, ocr_weight
@@ -150,7 +147,7 @@ class QueryController:
         ocr_weight: float,
     ):
         translated_ocr_query = self.translator.translate(ocr_query)
-        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()[0]
+        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
         result = await self.keyframe_service.rerank_by_ocr(
             results, ocr_embedding, top_k, ocr_weight
