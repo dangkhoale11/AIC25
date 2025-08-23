@@ -51,7 +51,7 @@ class KeyframeQueryService:
             top_k=top_k,
             exclude_ids=exclude_indices
         )
-        print('FOR DEBUGGING _search_keyframes')
+
         search_response = await self.keyframe_vector_repo.search_by_embedding(search_request)
 
         
@@ -94,7 +94,6 @@ class KeyframeQueryService:
         top_k: int,
         score_threshold: float | None = 0.5,
     ):
-        print('FOR DEBUGGING search_by_text')
         return await self._search_keyframes(text_embedding, top_k, score_threshold, None)   
     
 
@@ -131,6 +130,7 @@ class KeyframeQueryService:
         range_queries: a bunch of start end indices, and we just search inside these, ignore everything
         """
         return await self._search_keyframes(text_embedding, top_k, score_threshold, exclude_ids)   
+    
     
 
     async def search_by_text_and_filter_with_ocr(

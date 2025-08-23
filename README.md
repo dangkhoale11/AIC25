@@ -57,6 +57,7 @@ docker compose up -d
 ```bash
 python migration/embedding_migration.py --file_path <emnedding.pt file>
 python migration/keyframe_migration.py --file_path <id2index.json file path>
+python migration/ocr_migration.py --file_path <> --mode <"embeddings", "json">
 ```
 
 5. Run the application
