@@ -81,7 +81,7 @@ class MilvusEmbeddingInjector:
     def inject_embeddings(
         self, 
         embedding_file_path: str, 
-        batch_size: int = 10000,
+        batch_size: int = 1000,
     ):
         print(f"Loading embeddings from {embedding_file_path}")
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

@@ -1,22 +1,4 @@
-aiofiles
-beanie
-python-dotenv
-fastapi[standard]
-httpx
-ipykernel
-motor
-nicegui
-numpy
-open-clip-torch
-pydantic-settings
-pymilvus
-streamlit
-torch
-typing-extensions
-usearch
-uvicorn
-requests
-pandas
+sentence-transformers
 # Dùng googletrans bản chính thức hoặc fork ổn định
 googletrans==4.0.0-rc1
 # hoặc thay bằng fork này nếu conflict: googletrans-py
