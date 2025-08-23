@@ -36,7 +36,7 @@ class KeyFrameIndexMilvusSetting(BaseSettings):
 class OcrIndexMilvusSetting(BaseSettings):
     COLLECTION_NAME: str = "ocr"
     HOST: str = 'localhost'
-    PORT: str = '19531'
+    PORT: str = '19530'
     METRIC_TYPE: str = 'COSINE'
     INDEX_TYPE: str = 'FLAT'
     BATCH_SIZE: int =10000

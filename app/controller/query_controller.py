@@ -40,7 +40,7 @@ class QueryController:
             self.data_folder,
             f"L{model.group_num:02d}",
             f"V{model.video_num:03d}",
-            f"{model.keyframe_num:08d}.webp"
+            f"{model.keyframe_num:06d}.webp"
         ), model.confidence_score
     
         
@@ -50,7 +50,8 @@ class QueryController:
         top_k: int,
         score_threshold: float
     ):
-        embedding = self.model_service.embedding(query).tolist()[0]
+        translated_query = self.translator.translate(query)
+        embedding = self.model_service.embedding(translated_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text(embedding, top_k, score_threshold)
         return result
@@ -69,8 +70,9 @@ class QueryController:
         ]
 
         
-        
-        embedding = self.model_service.embedding(query).tolist()[0]
+        translated_query = self.translator.translate(query)
+        embedding = self.model_service.embedding(translated_query).tolist()[0]
+
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
         return result
 
@@ -110,9 +112,10 @@ class QueryController:
                 )
             ]
 
+            print(len(exclude_ids))
 
-
-        embedding = self.model_service.embedding(query).tolist()[0]
+        translated_query = self.translator.translate(query)
+        embedding = self.model_service.embedding(translated_query).tolist()[0]
         # print(exclude_ids)
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
         return result

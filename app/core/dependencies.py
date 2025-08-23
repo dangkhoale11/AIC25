@@ -150,7 +150,7 @@ def get_query_controller(
         
         data_folder = Path(app_settings.DATA_FOLDER)
         id2index_path = Path(app_settings.ID2INDEX_PATH)
-        
+        print(id2index_path)
         if not data_folder.exists():
             logger.warning(f"Data folder does not exist: {data_folder}")
             data_folder.mkdir(parents=True, exist_ok=True)
