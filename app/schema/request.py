@@ -51,3 +51,14 @@ class TextSearchWithSelectedGroupsAndVideosRequest(BaseSearchRequest):
     )
 
 
+class TemporalSearchRequest(BaseModel):
+    """Request for temporal search"""
+    start_query: str = Field(..., description="Search query for the start of the event")
+    end_query: str = Field(..., description="Search query for the end of the event")
+    pivot_frame: KeyframeServiceReponse = Field(..., description="The pivot keyframe for the temporal search")
+
+
+class RerankSearchRequest(BaseSearchRequest):
+    """Request for search with reranking"""
+    rerank_type: str = Field(..., description="The reranking method to use (e.g., 'ocr', 'gem')")
+    ocr_query: Optional[str] = Field(None, description="OCR search query text, required for OCR rerank")

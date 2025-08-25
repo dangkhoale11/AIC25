@@ -9,8 +9,15 @@ from schema.request import (
     TextSearchWithSelectedGroupsAndVideosRequest,
     TextSearchWithOcrRequest,
     OcrRerankRequest,
+    TemporalSearchRequest,
+    RerankSearchRequest,
 )
-from schema.response import KeyframeServiceReponse, SingleKeyframeDisplay, KeyframeDisplay
+from schema.response import (
+    KeyframeServiceReponse,
+    SingleKeyframeDisplay,
+    KeyframeDisplay,
+    TemporalSearchResponse,
+)
 from controller.query_controller import QueryController
 from core.dependencies import get_query_controller
 from core.logger import SimpleLogger
@@ -24,6 +31,40 @@ router = APIRouter(
     tags=["keyframe"],
     responses={404: {"description": "Not found"}},
 )
+
+
+@router.post(
+    "/search/rerank",
+    response_model=KeyframeDisplay,
+    summary="Search with reranking",
+    description="Perform a search and then rerank the results using a specified method.",
+    response_description="List of reranked keyframes with confidence scores"
+)
+async def search_with_rerank(
+    request: RerankSearchRequest,
+    controller: QueryController = Depends(get_query_controller)
+):
+    """
+    Search for keyframes with reranking.
+    """
+
+    logger.info(f"Rerank search request: query='{request.query}', rerank_type='{request.rerank_type}'")
+
+    results = await controller.search_with_rerank(
+        query=request.query,
+        top_k=request.top_k,
+        score_threshold=request.score_threshold,
+        rerank_type=request.rerank_type,
+        ocr_query=request.ocr_query,
+    )
+
+    logger.info(f"Found {len(results)} results with {request.rerank_type} reranking")
+
+    display_results = []
+    for r in results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
+    return KeyframeDisplay(results=display_results, raw_results=results)
 
 
 @router.post(
@@ -72,12 +113,10 @@ async def search_keyframes(
     )
     
     logger.info(f"Found {len(results)} results for query: '{request.query}'")
-    display_results = list(
-        map(
-            lambda pair: SingleKeyframeDisplay(path=pair[0], score=pair[1]),
-            map(controller.convert_model_to_path, results)
-        )
-    )
+    display_results = []
+    for r in results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
     return KeyframeDisplay(results=display_results, raw_results=results)
 
 
@@ -107,12 +146,10 @@ async def rerank_keyframes_with_ocr(
 
     logger.info(f"Found {len(results)} results with OCR reranking")
 
-    display_results = list(
-        map(
-            lambda pair: SingleKeyframeDisplay(path=pair[0], score=pair[1]),
-            map(controller.convert_model_to_path, results)
-        )
-    )
+    display_results = []
+    for r in results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
     return KeyframeDisplay(results=display_results, raw_results=results)
 
 
@@ -166,12 +203,10 @@ async def search_keyframes_with_ocr_filter(
 
     logger.info(f"Found {len(results)} results with OCR filtering")
 
-    display_results = list(
-        map(
-            lambda pair: SingleKeyframeDisplay(path=pair[0], score=pair[1]),
-            map(controller.convert_model_to_path, results)
-        )
-    )
+    display_results = []
+    for r in results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
     return KeyframeDisplay(results=display_results, raw_results=results)
 
 @router.post(
@@ -228,12 +263,10 @@ async def search_keyframes_exclude_groups(
     
     
 
-    display_results = list(
-        map(
-            lambda pair: SingleKeyframeDisplay(path=pair[0], score=pair[1]),
-            map(controller.convert_model_to_path, results)
-        )
-    )
+    display_results = []
+    for r in results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
     return KeyframeDisplay(results=display_results, raw_results=results)
 
 
@@ -301,14 +334,54 @@ async def search_keyframes_selected_groups_videos(
     
     logger.info(f"Found {len(results)} results within selected groups/videos")
 
-    display_results = list(
-        map(
-            lambda pair: SingleKeyframeDisplay(path=pair[0], score=pair[1]),
-            map(controller.convert_model_to_path, results)
-        )
-    )
+    display_results = []
+    for r in results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
     return KeyframeDisplay(results=display_results, raw_results=results)
 
+
+@router.post(
+    "/search/temporal",
+    response_model=TemporalSearchResponse,
+    summary="Temporal search for an event",
+    description="""
+    Perform a temporal search for an event defined by a start and end query, starting from a pivot keyframe.
+
+    **Parameters:**
+    - **start_query**: The search text for the beginning of the event.
+    - **end_query**: The search text for the end of the event.
+    - **pivot_frame**: The keyframe to start the search from.
+
+    **Returns:**
+    The start and end keyframes of the event.
+    """,
+    response_description="The start and end keyframes of the event."
+)
+async def search_temporal_event(
+    request: TemporalSearchRequest,
+    controller: QueryController = Depends(get_query_controller)
+):
+    """
+    Search for a temporal event.
+    """
+
+    logger.info(f"Temporal search request: start_query='{request.start_query}', end_query='{request.end_query}'")
+
+    start_frame, end_frame = await controller.search_temporal(
+        start_query=request.start_query,
+        end_query=request.end_query,
+        pivot_frame=request.pivot_frame,
+    )
     
+    start_frame_display = None
+    if start_frame:
+        path, score = controller.convert_model_to_path(start_frame)
+        start_frame_display = SingleKeyframeDisplay(path=path, score=score)
 
+    end_frame_display = None
+    if end_frame:
+        path, score = controller.convert_model_to_path(end_frame)
+        end_frame_display = SingleKeyframeDisplay(path=path, score=score)
 
+    return TemporalSearchResponse(start_frame=start_frame_display, end_frame=end_frame_display)

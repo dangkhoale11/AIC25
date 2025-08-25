@@ -84,6 +84,14 @@ if 'raw_search_results' not in st.session_state:
     st.session_state.raw_search_results = []
 if 'api_base_url' not in st.session_state:
     st.session_state.api_base_url = "http://127.0.0.1:8000"
+if 'compare_mode' not in st.session_state:
+    st.session_state.compare_mode = False
+if 'rerank_type' not in st.session_state:
+    st.session_state.rerank_type = "None"
+if 'pivot_frame' not in st.session_state:
+    st.session_state.pivot_frame = None
+if 'temporal_results' not in st.session_state:
+    st.session_state.temporal_results = None
 
 # Header
 st.markdown("""
@@ -131,6 +139,22 @@ with col2:
         options=["Default", "Exclude Groups", "Include Groups & Videos", "Search with OCR filter"],
         help="Choose how to filter your search results"
     )
+
+    st.markdown("### ⚖️ Compare Mode")
+    st.session_state.compare_mode = st.toggle("Enable Compare Mode", value=st.session_state.compare_mode)
+
+    if st.session_state.compare_mode:
+        st.session_state.rerank_type = st.selectbox(
+            "Rerank Type",
+            options=["None", "OCR", "GEM"],
+            help="Choose the reranking method"
+        )
+        if st.session_state.rerank_type == "OCR":
+            rerank_ocr_query_input = st.text_input(
+                "OCR Rerank Query",
+                placeholder="Enter OCR query for reranking",
+                help="Enter text to search in OCR for reranking"
+            )
 
 # Mode-specific parameters
 if search_mode == "Search with OCR filter":
@@ -200,7 +224,18 @@ if st.button("🚀 Search", use_container_width=True):
     else:
         with st.spinner("🔍 Searching for keyframes..."):
             try:
-                if search_mode == "Default":
+                if st.session_state.compare_mode and st.session_state.rerank_type != "None":
+                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/rerank"
+                    payload = {
+                        "query": query,
+                        "top_k": top_k,
+                        "score_threshold": score_threshold,
+                        "rerank_type": st.session_state.rerank_type,
+                    }
+                    if st.session_state.rerank_type == "OCR":
+                        payload["ocr_query"] = rerank_ocr_query_input
+
+                elif search_mode == "Default":
                     endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search"
                     payload = {
                         "query": query,
@@ -357,8 +392,64 @@ if st.session_state.search_results:
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+
+                if st.session_state.compare_mode:
+                    if st.button(f"Select as Pivot", key=f"pivot_{result['key']}"):
+                        # Find the corresponding raw result
+                        raw_result = next((r for r in st.session_state.raw_search_results if r['key'] == result['key']), None)
+                        if raw_result:
+                            st.session_state.pivot_frame = raw_result
+                            st.experimental_rerun()
+                        else:
+                            st.error("Could not find the raw result for the selected pivot.")
         
         st.markdown("<br>", unsafe_allow_html=True)
+
+if st.session_state.pivot_frame:
+    st.markdown("### 🕰️ Temporal Search")
+    st.write("Pivot Frame:")
+    st.json(st.session_state.pivot_frame)
+
+    start_query_temporal = st.text_input("Start Query")
+    end_query_temporal = st.text_input("End Query")
+
+    if st.button("Search Temporal Event"):
+        with st.spinner("Performing temporal search..."):
+            endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/temporal"
+            payload = {
+                "start_query": start_query_temporal,
+                "end_query": end_query_temporal,
+                "pivot_frame": st.session_state.pivot_frame,
+            }
+            response = requests.post(
+                endpoint,
+                json=payload,
+                headers={"Content-Type": "application/json"},
+                timeout=30
+            )
+            if response.status_code == 200:
+                st.session_state.temporal_results = response.json()
+                st.success("Temporal search complete!")
+            else:
+                st.error(f"API Error: {response.status_code} - {response.text}")
+
+if st.session_state.temporal_results:
+    st.markdown("### Temporal Search Results")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("#### Start Frame")
+        if st.session_state.temporal_results.get("start_frame"):
+            st.image(st.session_state.temporal_results["start_frame"]["path"])
+            st.write(f"Score: {st.session_state.temporal_results['start_frame']['score']:.3f}")
+        else:
+            st.write("No start frame found.")
+    with col2:
+        st.markdown("#### End Frame")
+        if st.session_state.temporal_results.get("end_frame"):
+            st.image(st.session_state.temporal_results["end_frame"]["path"])
+            st.write(f"Score: {st.session_state.temporal_results['end_frame']['score']:.3f}")
+        else:
+            st.write("No end frame found.")
 
 # Footer
 st.markdown("---")

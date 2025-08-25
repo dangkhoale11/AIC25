@@ -12,6 +12,7 @@ ROOT_DIR = os.path.abspath(
 sys.path.insert(0, ROOT_DIR)
 
 from service import ModelService, KeyframeQueryService
+from service.temporal_search_service import TemporalSearchService
 from schema.response import KeyframeServiceReponse
 from core.translation import TextTranslator
 
@@ -23,12 +24,14 @@ class QueryController:
         data_folder: Path,
         id2index_path: Path,
         model_service: ModelService,
-        keyframe_service: KeyframeQueryService
+        keyframe_service: KeyframeQueryService,
+        temporal_search_service: TemporalSearchService
     ):
         self.data_folder = data_folder
         self.id2index = json.load(open(id2index_path, 'r'))
         self.model_service = model_service
         self.keyframe_service = keyframe_service
+        self.temporal_search_service = temporal_search_service
         self.translator = TextTranslator()
 
     
@@ -54,6 +57,32 @@ class QueryController:
         embedding = self.model_service.embedding(translated_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text(embedding, top_k, score_threshold)
+        return result
+
+
+    async def search_with_rerank(
+        self,
+        query: str,
+        top_k: int,
+        score_threshold: float,
+        rerank_type: str,
+        ocr_query: str | None = None,
+    ):
+        translated_query = self.translator.translate(query)
+        text_embedding = self.model_service.embedding(translated_query).tolist()[0]
+
+        ocr_embedding = None
+        if rerank_type == "ocr" and ocr_query:
+            translated_ocr_query = self.translator.translate(ocr_query)
+            ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
+
+        result = await self.keyframe_service.search_with_rerank(
+            text_embedding=text_embedding,
+            top_k=top_k,
+            score_threshold=score_threshold,
+            method=rerank_type,
+            ocr_embedding=ocr_embedding,
+        )
         return result
 
 
@@ -156,3 +185,23 @@ class QueryController:
             results, ocr_embedding, top_k, ocr_weight
         )
         return result
+
+
+    async def search_temporal(
+        self,
+        start_query: str,
+        end_query: str,
+        pivot_frame: KeyframeServiceReponse,
+    ):
+        translated_start_query = self.translator.translate(start_query)
+        translated_end_query = self.translator.translate(end_query)
+        start_embedding = self.model_service.embedding(translated_start_query).tolist()[0]
+        end_embedding = self.model_service.embedding(translated_end_query).tolist()[0]
+
+        start_frame, end_frame = await self.temporal_search_service.search_temporal_event(
+            start_query_embedding=start_embedding,
+            end_query_embedding=end_embedding,
+            pivot_frame=pivot_frame,
+        )
+
+        return start_frame, end_frame

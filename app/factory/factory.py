@@ -14,6 +14,7 @@ sys.path.insert(0, ROOT_DIR)
 from repository.mongo import KeyframeRepository
 from repository.milvus import KeyframeVectorRepository, OcrVectorRepository
 from service import KeyframeQueryService, ModelService
+from service.temporal_search_service import TemporalSearchService
 from models.keyframe import Keyframe
 import open_clip
 from pymilvus import connections, Collection as MilvusCollection
@@ -70,6 +71,11 @@ class ServiceFactory:
             keyframe_mongo_repo=self._mongo_keyframe_repo,
             keyframe_vector_repo=self._milvus_keyframe_repo,
             ocr_vector_repo=self._milvus_ocr_repo
+        )
+
+        self._temporal_search_service = TemporalSearchService(
+            keyframe_mongo_repo=self._mongo_keyframe_repo,
+            keyframe_vector_repo=self._milvus_keyframe_repo,
         )
 
     def _init_milvus_repo(
@@ -150,3 +156,6 @@ class ServiceFactory:
 
     def get_keyframe_query_service(self):
         return self._keyframe_query_service
+
+    def get_temporal_search_service(self):
+        return self._temporal_search_service

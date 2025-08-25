@@ -13,6 +13,7 @@ class KeyframeServiceReponse(BaseModel):
 class SingleKeyframeDisplay(BaseModel):
     path: str
     score: float
+    key: int
 
 from typing import List, Optional
 
@@ -20,3 +21,9 @@ from typing import List, Optional
 class KeyframeDisplay(BaseModel):
     results: list[SingleKeyframeDisplay]
     raw_results: Optional[List[KeyframeServiceReponse]] = None
+
+
+class TemporalSearchResponse(BaseModel):
+    """Response for temporal search"""
+    start_frame: Optional[SingleKeyframeDisplay] = None
+    end_frame: Optional[SingleKeyframeDisplay] = None
