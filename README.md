@@ -62,9 +62,7 @@ Data/
 │   └── ...
 │
 └── L30/
-css
-Copy
-Edit
+```
 
 
 ### In app/core/settings.py change the file path of DATA_FOLDER and ID2INDEX appropriate with your computer
