@@ -36,8 +36,11 @@ uv add aiofiles beanie dotenv fastapi[standard] httpx ipykernel motor nicegui nu
 ```
 
 ### Change the dataset to format 
+Dataset should follow this structure:
+
+```text
 Data/
-│── L21/
+├── L21/
 │   ├── V001/
 │   │   ├── 000001.webp
 │   │   ├── 000002.webp
@@ -48,18 +51,21 @@ Data/
 │   │   └── ...
 │   └── ...
 │
-│── L22/
+├── L22/
 │   ├── V001/
 │   │   ├── 000001.webp
 │   │   ├── 000002.webp
 │   │   └── ...
 │   └── ...
 │
-│── L23/
+├── L23/
 │   └── ...
 │
-│── ...
-│── L30/
+└── L30/
+css
+Copy
+Edit
+
 
 ### In app/core/settings.py change the file path of DATA_FOLDER and ID2INDEX appropriate with your computer
 
