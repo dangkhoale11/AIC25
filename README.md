@@ -71,6 +71,7 @@ Data/
 3. Activate .venv
 ```bash
 source .venv/bin/activate
+.venv/Scripts/activte #windown
 ```
 4. Run docker compose
 ```bash
