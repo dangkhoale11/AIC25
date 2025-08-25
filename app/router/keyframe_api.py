@@ -58,8 +58,8 @@ async def search_with_rerank(
         ocr_query=request.ocr_query,
     )
 
-    logger.info(f"Found {len(results)} results with {request.rerank_type} reranking")
-
+    # logger.info(f"Found {len(results)} results with {request.rerank_type} reranking")
+    print(type(results))
     display_results = []
     for r in results:
         path, score = controller.convert_model_to_path(r)

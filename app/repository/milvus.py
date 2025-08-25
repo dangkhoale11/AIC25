@@ -6,6 +6,7 @@ Including Faiss and Usearch
 
 import os
 import sys
+from typing import List
 ROOT_DIR = os.path.abspath(
     os.path.join(
         os.path.dirname(__file__), '../'
@@ -69,9 +70,36 @@ class KeyframeVectorRepository(MilvusBaseRepository):
             results=results,
             total_found=len(results),
         )
-    
+    async def get_embeddings_by_ids(
+        self,
+        ids: List[int]
+    ) -> List[List[float]]:
+        """
+        Get embeddings from Milvus by a list of IDs.
+        """
+        if not ids:
+            return []
+
+        # query để lấy field 'embedding'
+        results = self.collection.query(
+            expr=f"id in {ids}",
+            output_fields=["embedding"],
+        )
+
+        # Milvus trả về list[dict], cần map ra đúng thứ tự id
+        id_to_emb = {res["id"]: res["embedding"] for res in results}
+
+        # Trả về theo đúng thứ tự input ids
+        embeddings = [id_to_emb.get(i) for i in ids if i in id_to_emb]
+        return embeddings
+
+
     def get_all_id(self) -> list[int]:
         return list(range(self.collection.num_entities))
+
+
+
+
 
 
 class OcrVectorRepository(MilvusBaseRepository):

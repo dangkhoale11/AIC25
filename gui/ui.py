@@ -3,6 +3,10 @@ import requests
 import json
 from typing import List, Optional
 import pandas as pd
+import os
+from PIL import Image
+import base64
+from io import BytesIO
 
 # Page configuration
 st.set_page_config(
@@ -74,8 +78,65 @@ st.markdown("""
         text-align: center;
         margin: 0.5rem;
     }
+    
+    .image-placeholder {
+        background: #f0f0f0; 
+        height: 150px; 
+        border-radius: 10px; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center;
+        border: 2px dashed #ccc;
+        text-align: center; 
+        color: #666;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+def safe_image_display(image_path: str, width: int = 200, caption: str = ""):
+    """
+    Safely display an image with fallback options
+    """
+    try:
+        # Method 1: Try direct path if it's a valid file
+        if os.path.exists(image_path):
+            st.image(image_path, width=width, caption=caption)
+            return True
+        
+        # Method 2: Try to load from URL if it's a URL
+        elif image_path.startswith(('http://', 'https://')):
+            st.image(image_path, width=width, caption=caption)
+            return True
+        
+        # Method 3: Try to get image from API
+        elif hasattr(st.session_state, 'api_base_url'):
+            try:
+                # Assume there's an endpoint to get the image
+                image_url = f"{st.session_state.api_base_url}/api/v1/keyframe/image?path={image_path}"
+                response = requests.get(image_url, timeout=10)
+                if response.status_code == 200:
+                    image = Image.open(BytesIO(response.content))
+                    st.image(image, width=width, caption=caption)
+                    return True
+            except:
+                pass
+        
+        return False
+    except Exception as e:
+        return False
+
+def display_image_placeholder(caption: str = ""):
+    """
+    Display a placeholder when image can't be loaded
+    """
+    st.markdown(f"""
+    <div class="image-placeholder">
+        <div>
+            🖼️<br>Image Preview<br>Not Available<br>
+            <small style="font-size: 0.8em;">{caption}</small>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Initialize session state
 if 'search_results' not in st.session_state:
@@ -112,6 +173,20 @@ with st.expander("⚙️ API Configuration", expanded=False):
     )
     if api_url != st.session_state.api_base_url:
         st.session_state.api_base_url = api_url
+    
+    # Image display options
+    st.markdown("**Image Display Options:**")
+    image_display_method = st.selectbox(
+        "How to handle images",
+        options=[
+            "Show placeholder only",
+            "Try to load from file path",
+            "Try to load from API endpoint",
+            "Show path as text"
+        ],
+        index=1,
+        help="Choose how images should be displayed in results"
+    )
 
 # Main search interface
 col1, col2 = st.columns([2, 1])
@@ -158,7 +233,7 @@ with col2:
 
 # Mode-specific parameters
 if search_mode == "Search with OCR filter":
-    st.markdown("### 📝 OCR Filter")
+    st.markdown("### 🔍 OCR Filter")
     ocr_query = st.text_input(
         "OCR Search Query",
         placeholder="Enter search query for OCR content",
@@ -298,7 +373,7 @@ if st.session_state.search_results:
     st.markdown("## 📋 Search Results")
 
     if st.session_state.raw_search_results:
-        st.markdown("### 📝 OCR Rerank")
+        st.markdown("### 🔍 OCR Rerank")
         rerank_ocr_query = st.text_input(
             "OCR Rerank Query",
             placeholder="Enter search query for OCR content to rerank",
@@ -359,25 +434,32 @@ if st.session_state.search_results:
             col_img, col_info = st.columns([1, 3])
             
             with col_img:
-                # Try to display image if path is accessible
-                try:
-                    st.image(result['path'], width=200, caption=f"Keyframe {i+1}")
-                except:
-                    st.markdown(f"""
-                    <div style="
-                        background: #f0f0f0; 
-                        height: 150px; 
-                        border-radius: 10px; 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center;
-                        border: 2px dashed #ccc;
-                    ">
-                        <div style="text-align: center; color: #666;">
-                            🖼️<br>Image Preview<br>Not Available
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                # Handle different image display methods
+                image_displayed = False
+                
+                if image_display_method == "Try to load from file path":
+                    image_displayed = safe_image_display(result['path'], width=200, caption=f"Keyframe {i+1}")
+                
+                elif image_display_method == "Try to load from API endpoint":
+                    # Try to get image through API
+                    try:
+                        image_endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/image"
+                        params = {"path": result['path']}
+                        response = requests.get(image_endpoint, params=params, timeout=10)
+                        if response.status_code == 200:
+                            image = Image.open(BytesIO(response.content))
+                            st.image(image, width=200, caption=f"Keyframe {i+1}")
+                            image_displayed = True
+                    except Exception as e:
+                        st.error(f"Failed to load image from API: {str(e)}")
+                
+                elif image_display_method == "Show path as text":
+                    st.markdown(f"**Image Path:**\n`{result['path']}`")
+                    image_displayed = True
+                
+                # Show placeholder if image couldn't be displayed
+                if not image_displayed:
+                    display_image_placeholder(f"Keyframe {i+1}")
             
             with col_info:
                 st.markdown(f"""
@@ -394,17 +476,18 @@ if st.session_state.search_results:
                 """, unsafe_allow_html=True)
 
                 if st.session_state.compare_mode:
-                    if st.button(f"Select as Pivot", key=f"pivot_{result['key']}"):
+                    if st.button(f"Select as Pivot", key=f"pivot_{result.get('key', i)}"):
                         # Find the corresponding raw result
-                        raw_result = next((r for r in st.session_state.raw_search_results if r['key'] == result['key']), None)
+                        raw_result = next((r for r in st.session_state.raw_search_results if r.get('key') == result.get('key')), None)
                         if raw_result:
                             st.session_state.pivot_frame = raw_result
-                            st.experimental_rerun()
+                            st.rerun()
                         else:
                             st.error("Could not find the raw result for the selected pivot.")
         
         st.markdown("<br>", unsafe_allow_html=True)
 
+# Temporal search section
 if st.session_state.pivot_frame:
     st.markdown("### 🕰️ Temporal Search")
     st.write("Pivot Frame:")
@@ -439,14 +522,16 @@ if st.session_state.temporal_results:
     with col1:
         st.markdown("#### Start Frame")
         if st.session_state.temporal_results.get("start_frame"):
-            st.image(st.session_state.temporal_results["start_frame"]["path"])
+            if not safe_image_display(st.session_state.temporal_results["start_frame"]["path"]):
+                display_image_placeholder("Start Frame")
             st.write(f"Score: {st.session_state.temporal_results['start_frame']['score']:.3f}")
         else:
             st.write("No start frame found.")
     with col2:
         st.markdown("#### End Frame")
         if st.session_state.temporal_results.get("end_frame"):
-            st.image(st.session_state.temporal_results["end_frame"]["path"])
+            if not safe_image_display(st.session_state.temporal_results["end_frame"]["path"]):
+                display_image_placeholder("End Frame")
             st.write(f"Score: {st.session_state.temporal_results['end_frame']['score']:.3f}")
         else:
             st.write("No end frame found.")
