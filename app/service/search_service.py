@@ -141,58 +141,58 @@ class KeyframeQueryService:
     
     
 
-    async def search_by_text_and_filter_with_ocr(
-        self,
-        text_embedding: list[float],
-        ocr_embedding: list[float],
-        top_k: int,
-        score_threshold: float | None,
-        ocr_weight: float = 0.5,
-    ):
-        # 1. Initial search on keyframes
-        initial_results = await self._search_keyframes(text_embedding, top_k, score_threshold, None)
+    # async def search_by_text_and_filter_with_ocr(
+    #     self,
+    #     text_embedding: list[float],
+    #     ocr_embedding: list[float],
+    #     top_k: int,
+    #     score_threshold: float | None,
+    #     ocr_weight: float = 0.5,
+    # ):
+    #     # 1. Initial search on keyframes
+    #     initial_results = await self._search_keyframes(text_embedding, top_k, score_threshold, None)
 
-        if not initial_results:
-            return []
+    #     if not initial_results:
+    #         return []
 
-        return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k, ocr_weight)
+    #     return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k, ocr_weight)
 
 
-    async def rerank_by_ocr(
-        self,
-        initial_results: list[KeyframeServiceReponse],
-        ocr_embedding: list[float],
-        top_k: int,
-        ocr_weight: float,
-    ):
-        initial_ids = [result.key for result in initial_results]
+    # async def rerank_by_ocr(
+    #     self,
+    #     initial_results: list[KeyframeServiceReponse],
+    #     ocr_embedding: list[float],
+    #     top_k: int,
+    #     ocr_weight: float,
+    # ):
+    #     initial_ids = [result.key for result in initial_results]
 
-        # 2. Re-rank based on OCR search
-        search_request = MilvusSearchRequest(
-            embedding=ocr_embedding,
-            top_k=top_k
-        )
+    #     # 2. Re-rank based on OCR search
+    #     search_request = MilvusSearchRequest(
+    #         embedding=ocr_embedding,
+    #         top_k=top_k
+    #     )
         
-        ocr_search_response = await self.ocr_vector_repo.search_by_embedding_and_ids(search_request, initial_ids)
+    #     ocr_search_response = await self.ocr_vector_repo.search_by_embedding_and_ids(search_request, initial_ids)
 
-        # 3. Create a map of id -> ocr_score
-        ocr_scores = {result.id_: result.distance for result in ocr_search_response.results}
+    #     # 3. Create a map of id -> ocr_score
+    #     ocr_scores = {result.id_: result.distance for result in ocr_search_response.results}
 
-        # 4. Combine and re-sort results
-        combined_results = []
-        for result in initial_results:
-            ocr_score = ocr_scores.get(result.key, 0.0)
-            # a simple average, can be replaced with more sophisticated weighting
-            combined_score = (1 - ocr_weight) * result.confidence_score + ocr_weight * ocr_score
-            result.confidence_score = combined_score
-            combined_results.append(result)
+    #     # 4. Combine and re-sort results
+    #     combined_results = []
+    #     for result in initial_results:
+    #         ocr_score = ocr_scores.get(result.key, 0.0)
+    #         # a simple average, can be replaced with more sophisticated weighting
+    #         combined_score = (1 - ocr_weight) * result.confidence_score + ocr_weight * ocr_score
+    #         result.confidence_score = combined_score
+    #         combined_results.append(result)
 
-        # 5. Sort by the new combined score
-        sorted_results = sorted(
-            combined_results, key=lambda r: r.confidence_score, reverse=True
-        )
+    #     # 5. Sort by the new combined score
+    #     sorted_results = sorted(
+    #         combined_results, key=lambda r: r.confidence_score, reverse=True
+    #     )
 
-        return sorted_results
+    #     return sorted_results
 
 
     def gem_pooling_batch(self, vectors: np.ndarray, p: float = 1.0) -> np.ndarray:
@@ -338,13 +338,13 @@ class KeyframeQueryService:
         self,
         text_embedding: list[float],
         top_k: int,
-        method: str = "OCR",   # "ocr" | "gem" | "temporal"
+        method: str = "GEM",   # "ocr" | "gem" | "temporal"
         ocr_embedding: list[float] = None,
         score_threshold: float = 0.5,
     ):
         initial_results = await self._search_keyframes(text_embedding, top_k, score_threshold)
 
-        if method == "OCR" and ocr_embedding is not None:
-            return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k)
-        elif method == "GEM":
+        # if method == "OCR" and ocr_embedding is not None:
+        #     return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k)
+        if method == "GEM":
             return await self.rerank_by_gem(initial_results, text_embedding, top_k)
