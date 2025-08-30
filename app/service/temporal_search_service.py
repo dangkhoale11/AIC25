@@ -1,101 +1,116 @@
 import os
 import sys
 import numpy as np
-from typing import List, Tuple
+from typing import List
 
 ROOT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '../'))
 sys.path.insert(0, ROOT_DIR)
 
 from repository.milvus import KeyframeVectorRepository
+from repository.mongo import KeyframeRepository
 from schema.response import KeyframeServiceReponse
 
 class TemporalSearchService:
     def __init__(
         self,
         keyframe_vector_repo: KeyframeVectorRepository,
+        keyframe_mongo_repo: KeyframeRepository,
     ):
         self.keyframe_vector_repo = keyframe_vector_repo
+        self.keyframe_mongo_repo = keyframe_mongo_repo
 
     def _cos_sim(self, a, b):
         return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b) + 1e-8))
 
-    async def _find_best_match_in_slice(
+    async def _adaptive_temporal_search(
         self,
         query_embedding: np.ndarray,
         frames: List[KeyframeServiceReponse],
         frame_embeddings: List[np.ndarray],
-    ) -> Tuple[KeyframeServiceReponse, float]:
-        """
-        Finds the frame in a list that best matches the query embedding.
-        """
+        pivot_index: int,
+        direction: str,
+        threshold: int = 3,
+    ):
+        best_idx = pivot_index
         best_score = -1.0
-        best_frame = None
+        tolerance = 0
 
-        for i, frame in enumerate(frames):
-            sim = self._cos_sim(query_embedding, frame_embeddings[i])
+        if direction == "forward":
+            idx_range = range(pivot_index + 1, len(frames))
+        else:
+            idx_range = range(pivot_index - 1, -1, -1)
+
+        for idx in idx_range:
+            sim = self._cos_sim(query_embedding, frame_embeddings[idx])
             if sim > best_score:
                 best_score = sim
-                best_frame = frame
+                best_idx = idx
+                tolerance = 0
+            else:
+                tolerance += 1
+                if tolerance >= threshold:
+                    break
 
-        if best_frame:
-            best_frame.confidence_score = best_score
-
-        return best_frame, best_score
+        return best_idx
 
     async def search_temporal_event(
         self,
         start_query_embedding: list[float],
         end_query_embedding: list[float],
-        search_results: List[KeyframeServiceReponse],
-        search_range: tuple[int, int],
-        window_size: int = 10,
+        pivot_frame: KeyframeServiceReponse,
     ):
-        """
-        Performs a temporal search using a sliding window approach around pivot points.
-        """
-        start_idx, end_idx = search_range
+        # 1. Get all keyframes from the same video as the pivot frame
+        video_num = pivot_frame.video_num
+        keyframes_in_video = await self.keyframe_mongo_repo.get_keyframes_by_pivot(pivot_frame=pivot_frame)
 
-        if not (0 <= start_idx < end_idx <= len(search_results)):
+        if not keyframes_in_video:
             return None, None
 
-        candidate_start_frames = []
-        candidate_end_frames = []
+        # Sort frames by keyframe_num to ensure chronological order
+        sorted_keyframes = sorted(keyframes_in_video, key=lambda k: k.keyframe_num)
 
+        frame_ids = [k.key for k in sorted_keyframes]
+        frame_embeddings = await self.keyframe_vector_repo.get_embeddings_by_ids(frame_ids)
+
+        if not frame_embeddings:
+            return None, None
+
+        # Convert to numpy arrays
+        frame_embeddings_np = [np.array(fe, dtype=np.float32) for fe in frame_embeddings]
         start_query_embedding_np = np.array(start_query_embedding, dtype=np.float32)
         end_query_embedding_np = np.array(end_query_embedding, dtype=np.float32)
 
-        for pivot_idx in range(start_idx, end_idx):
-            window_start = max(0, pivot_idx - window_size)
-            window_end = min(len(search_results), pivot_idx + window_size + 1)
+        # 2. Find the pivot index in the sorted list
+        try:
+            pivot_index = frame_ids.index(pivot_frame.key)
+        except ValueError:
+            return None, None # Pivot not found in the video, should not happen
 
-            results_slice = search_results[window_start:window_end]
-            if not results_slice:
-                continue
+        # 3. Perform temporal search
+        start_idx = await self._adaptive_temporal_search(
+            query_embedding=start_query_embedding_np,
+            frames=sorted_keyframes,
+            frame_embeddings=frame_embeddings_np,
+            pivot_index=pivot_index,
+            direction="backward",
+        )
 
-            frame_ids = [k.key for k in results_slice]
-            frame_embeddings = await self.keyframe_vector_repo.get_embeddings_by_ids(frame_ids)
-            if not frame_embeddings:
-                continue
+        end_idx = await self._adaptive_temporal_search(
+            query_embedding=end_query_embedding_np,
+            frames=sorted_keyframes,
+            frame_embeddings=frame_embeddings_np,
+            pivot_index=pivot_index,
+            direction="forward",
+        )
 
-            frame_embeddings_np = [np.array(fe, dtype=np.float32) for fe in frame_embeddings]
-
-            start_frame, start_score = await self._find_best_match_in_slice(
-                query_embedding=start_query_embedding_np,
-                frames=results_slice,
-                frame_embeddings=frame_embeddings_np,
+        # 4. Lấy ra frame object rồi wrap thành KeyframeServiceReponse
+        def to_service_response(frame) -> KeyframeServiceReponse:
+            return KeyframeServiceReponse(
+                key=frame.key,
+                video_num=frame.video_num,
+                group_num=frame.group_num,
+                keyframe_num=frame.keyframe_num,
+                confidence_score=getattr(frame, "confidence_score", 1.0)
             )
-            if start_frame:
-                candidate_start_frames.append(start_frame)
 
-            end_frame, end_score = await self._find_best_match_in_slice(
-                query_embedding=end_query_embedding_np,
-                frames=results_slice,
-                frame_embeddings=frame_embeddings_np,
-            )
-            if end_frame:
-                candidate_end_frames.append(end_frame)
-
-        best_start_frame = max(candidate_start_frames, key=lambda f: f.confidence_score, default=None)
-        best_end_frame = max(candidate_end_frames, key=lambda f: f.confidence_score, default=None)
-
-        return best_start_frame, best_end_frame
+        return to_service_response(sorted_keyframes[start_idx]), to_service_response(sorted_keyframes[end_idx])

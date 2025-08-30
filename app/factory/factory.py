@@ -75,6 +75,7 @@ class ServiceFactory:
 
         self._temporal_search_service = TemporalSearchService(
             keyframe_vector_repo=self._milvus_keyframe_repo,
+            keyframe_mongo_repo=self._mongo_keyframe_repo,
         )
 
     def _init_milvus_repo(

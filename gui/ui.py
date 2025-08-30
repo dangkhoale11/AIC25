@@ -265,11 +265,11 @@ if st.button("🚀 Search", use_container_width=True):
                 if response.status_code == 200:
                     data = response.json()
                     # Check if the response is for a temporal search or a normal search
-                    if 'start_frame' in data or 'end_frame' in data:
-                        st.session_state.temporal_results = data
+                    if 'events' in data:
+                        st.session_state.temporal_results = data.get("events", [])
                         st.session_state.search_results = []
                         st.session_state.raw_search_results = []
-                        st.success("✅ Temporal search complete!")
+                        st.success(f"✅ Temporal search complete! Found {len(st.session_state.temporal_results)} events.")
                     else:
                         st.session_state.search_results = data.get("results", [])
                         st.session_state.raw_search_results = data.get("raw_results", [])
@@ -325,38 +325,50 @@ if st.session_state.temporal_results:
     st.markdown("---")
     st.markdown("### 🕰️ Temporal Search Results")
 
-    start_frame = st.session_state.temporal_results.get("start_frame")
-    end_frame = st.session_state.temporal_results.get("end_frame")
-
-    if start_frame and end_frame:
+    events = st.session_state.temporal_results
+    if events:
         # CSV export for temporal search
         try:
-            start_path_parts = start_frame['path'].replace('\\', '/').split('/')
-            end_path_parts = end_frame['path'].replace('\\', '/').split('/')
-            video_file_name = f"{start_path_parts[-3]}/{start_path_parts[-2]}"
-            start_idx = start_path_parts[-1].split('.')[0]
-            end_idx = end_path_parts[-1].split('.')[0]
-            temporal_csv = f"video_file_name,start Idx,end Idx\n{video_file_name},{start_idx},{end_idx}\n"
-            st.download_button("Create File Submission (Temporal Search)", temporal_csv, "temporal_search_submission.csv", "text/csv")
+            temporal_csv_data = "video_file_name,start_Idx,end_Idx\n"
+            for event in events:
+                start_frame = event.get("start_frame")
+                end_frame = event.get("end_frame")
+                if start_frame and end_frame:
+                    start_path_parts = start_frame['path'].replace('\\', '/').split('/')
+                    end_path_parts = end_frame['path'].replace('\\', '/').split('/')
+                    video_file_name = f"{start_path_parts[-3]}/{start_path_parts[-2]}"
+                    start_idx = start_path_parts[-1].split('.')[0]
+                    end_idx = end_path_parts[-1].split('.')[0]
+                    temporal_csv_data += f"{video_file_name},{start_idx},{end_idx}\n"
+            st.download_button("Create File Submission (Temporal Search)", temporal_csv_data, "temporal_search_submission.csv", "text/csv")
         except (IndexError, KeyError):
             st.warning("Could not generate temporal search CSV due to unexpected path format.")
 
         # Display frames
-        col1, col2 = st.columns(2)
-        with col1:
-            st.markdown("#### Start Frame")
-            if not safe_image_display(start_frame["path"]):
-                display_image_placeholder("Start Frame")
-            st.markdown(f"<p><strong>Path:</strong> {start_frame['path']}</p>", unsafe_allow_html=True)
-            st.markdown(f"<p><strong>Score:</strong> {start_frame['score']:.3f}</p>", unsafe_allow_html=True)
-        with col2:
-            st.markdown("#### End Frame")
-            if not safe_image_display(end_frame["path"]):
-                display_image_placeholder("End Frame")
-            st.markdown(f"<p><strong>Path:</strong> {end_frame['path']}</p>", unsafe_allow_html=True)
-            st.markdown(f"<p><strong>Score:</strong> {end_frame['score']:.3f}</p>", unsafe_allow_html=True)
+        for i, event in enumerate(events):
+            st.markdown(f"#### Event #{i+1}")
+            start_frame = event.get("start_frame")
+            end_frame = event.get("end_frame")
+
+            if start_frame and end_frame:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("##### Start Frame")
+                    if not safe_image_display(start_frame["path"]):
+                        display_image_placeholder("Start Frame")
+                    st.markdown(f"<p><strong>Path:</strong> {start_frame['path']}</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p><strong>Score:</strong> {start_frame['score']:.3f}</p>", unsafe_allow_html=True)
+                with col2:
+                    st.markdown("##### End Frame")
+                    if not safe_image_display(end_frame["path"]):
+                        display_image_placeholder("End Frame")
+                    st.markdown(f"<p><strong>Path:</strong> {end_frame['path']}</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p><strong>Score:</strong> {end_frame['score']:.3f}</p>", unsafe_allow_html=True)
+            else:
+                st.warning(f"Event #{i+1} did not return a valid start and end frame.")
+            st.markdown("---")
     else:
-        st.warning("Temporal search did not return a valid start and end frame.")
+        st.warning("Temporal search did not return any valid events.")
 
 # Footer
 st.markdown("---")

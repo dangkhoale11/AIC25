@@ -16,6 +16,7 @@ from schema.response import (
     SingleKeyframeDisplay,
     KeyframeDisplay,
     TemporalSearchResponse,
+    TemporalEvent,
 )
 from controller.query_controller import QueryController
 from core.dependencies import get_query_controller
@@ -42,24 +43,34 @@ async def _handle_search_response(
     """
     if request.use_temporal and request.temporal_start_query and request.temporal_end_query:
         logger.info("Performing temporal search on initial results.")
-        start_frame, end_frame = await controller.search_temporal(
+        temporal_events_data = await controller.search_temporal(
             start_query=request.temporal_start_query,
             end_query=request.temporal_end_query,
             search_results=initial_results,
-            search_range=request.temporal_search_range
+            search_range=request.temporal_search_range,
         )
 
-        start_frame_display = None
-        if start_frame:
-            path, score = controller.convert_model_to_path(start_frame)
-            start_frame_display = SingleKeyframeDisplay(path=path, score=score, key=start_frame.key)
+        temporal_events = []
+        for event_data in temporal_events_data:
+            start_frame = event_data.get("start_frame")
+            end_frame = event_data.get("end_frame")
 
-        end_frame_display = None
-        if end_frame:
-            path, score = controller.convert_model_to_path(end_frame)
-            end_frame_display = SingleKeyframeDisplay(path=path, score=score, key=end_frame.key)
+            start_frame_display = None
+            if start_frame:
+                path, score = controller.convert_model_to_path(start_frame)
+                start_frame_display = SingleKeyframeDisplay(path=path, score=score, key=start_frame.key)
 
-        return TemporalSearchResponse(start_frame=start_frame_display, end_frame=end_frame_display)
+            end_frame_display = None
+            if end_frame:
+                path, score = controller.convert_model_to_path(end_frame)
+                end_frame_display = SingleKeyframeDisplay(path=path, score=score, key=end_frame.key)
+
+            if start_frame_display and end_frame_display:
+                temporal_events.append(
+                    TemporalEvent(start_frame=start_frame_display, end_frame=end_frame_display)
+                )
+
+        return TemporalSearchResponse(events=temporal_events)
 
     else:
         logger.info(f"Found {len(initial_results)} results for query: '{request.query}'")
