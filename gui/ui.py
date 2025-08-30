@@ -137,8 +137,6 @@ if 'raw_search_results' not in st.session_state:
     st.session_state.raw_search_results = []
 if 'api_base_url' not in st.session_state:
     st.session_state.api_base_url = "http://127.0.0.1:8000"
-if 'pivot_frame' not in st.session_state:
-    st.session_state.pivot_frame = None
 if 'temporal_results' not in st.session_state:
     st.session_state.temporal_results = None
 
@@ -176,7 +174,7 @@ query = st.text_input(
 
 col1, col2 = st.columns(2)
 with col1:
-    top_k = st.slider("📊 Max Results", 1, 200, 10)
+    top_k = st.slider("📊 Max Results", 1, 500, 10) # Increased max for wider temporal search range
 with col2:
     score_threshold = st.slider("🎯 Min Score", 0.0, 1.0, 0.0, 0.1)
 
@@ -210,11 +208,7 @@ use_rerank = st.toggle("✨ Enable GEM Reranking")
 if use_rerank:
     st.markdown("#### 💎 GEM Reranking Parameters")
     sim_metric = st.selectbox("Similarity Metric", ["cosine", "dot", "euclid"])
-
-    st.markdown("##### Refine Query (g_qe)")
     p_qe = st.slider("p_qe (Query Expansion Power)", 0.0, 150.0, 3.0, 0.5)
-
-    st.markdown("##### Refine Frame (g_dr)")
     p_dr = st.slider("p_dr (Document Refinement Power)", 0.0, 150.0, 3.0, 0.5)
     m_neighbors = st.slider("m_neighbors (Number of Neighbors)", 0, 20, 5)
 
@@ -224,48 +218,63 @@ use_temporal = st.toggle("🕰️ Enable Temporal Search")
 
 if use_temporal:
     st.markdown("#### ⏳ Temporal Search Parameters")
-    start_query_temporal = st.text_input("Start of Event Query")
-    end_query_temporal = st.text_input("End of Event Query")
-    temporal_tolerance = st.slider("Temporal Tolerance", 0, 150, 3)
+    start_query_temporal = st.text_input("Start of Event Query", placeholder="e.g., person opens door")
+    end_query_temporal = st.text_input("End of Event Query", placeholder="e.g., person closes door")
+    temporal_search_range = st.slider("Results Range to Search", 0, top_k, (0, 20), help=f"Select the start and end index from the top {top_k} results to perform the temporal search on.")
+
 
 # --- Search Button ---
 st.markdown("---")
 if st.button("🚀 Search", use_container_width=True):
     if not query.strip():
         st.error("Please enter a search query")
+    elif use_temporal and (not start_query_temporal or not end_query_temporal):
+        st.error("Please enter both a start and end query for temporal search.")
     else:
         with st.spinner("🔍 Searching..."):
-            try:
-                # Determine endpoint and payload based on mode
-                if use_rerank:
-                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/rerank"
-                    payload = {
-                        "query": query,
-                        "top_k": top_k,
-                        "score_threshold": score_threshold,
-                        "rerank_type": "GEM",
-                        "p_qe": p_qe,
-                        "p_dr": p_dr,
-                        "m_neighbors": m_neighbors,
-                        "sim_metric": sim_metric,
-                    }
-                elif search_mode == "Normal Search":
-                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search"
-                    payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
-                elif search_mode == "Search with Exclude Group":
-                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
-                    payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "exclude_groups": exclude_groups}
-                elif search_mode == "Search with Group and Video":
-                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
-                    payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "include_groups": include_groups, "include_videos": include_videos}
+            # Determine endpoint and base payload
+            if use_rerank:
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/rerank"
+                payload = {
+                    "query": query, "top_k": top_k, "score_threshold": score_threshold,
+                    "rerank_type": "GEM", "p_qe": p_qe, "p_dr": p_dr,
+                    "m_neighbors": m_neighbors, "sim_metric": sim_metric,
+                }
+            elif search_mode == "Normal Search":
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search"
+                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
+            elif search_mode == "Search with Exclude Group":
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
+                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "exclude_groups": exclude_groups}
+            else: # Search with Group and Video
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
+                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "include_groups": include_groups, "include_videos": include_videos}
 
-                response = requests.post(endpoint, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
+            # Add temporal search parameters if enabled
+            if use_temporal:
+                payload.update({
+                    "use_temporal": True,
+                    "temporal_start_query": start_query_temporal,
+                    "temporal_end_query": end_query_temporal,
+                    "temporal_search_range": temporal_search_range,
+                })
+
+            try:
+                response = requests.post(endpoint, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
 
                 if response.status_code == 200:
                     data = response.json()
-                    st.session_state.search_results = data.get("results", [])
-                    st.session_state.raw_search_results = data.get("raw_results", [])
-                    st.success(f"✅ Found {len(st.session_state.search_results)} results!")
+                    # Check if the response is for a temporal search or a normal search
+                    if 'start_frame' in data or 'end_frame' in data:
+                        st.session_state.temporal_results = data
+                        st.session_state.search_results = []
+                        st.session_state.raw_search_results = []
+                        st.success("✅ Temporal search complete!")
+                    else:
+                        st.session_state.search_results = data.get("results", [])
+                        st.session_state.raw_search_results = data.get("raw_results", [])
+                        st.session_state.temporal_results = None
+                        st.success(f"✅ Found {len(st.session_state.search_results)} results!")
                 else:
                     st.error(f"❌ API Error: {response.status_code} - {response.text}")
             except requests.exceptions.RequestException as e:
@@ -273,16 +282,14 @@ if st.button("🚀 Search", use_container_width=True):
             except Exception as e:
                 st.error(f"❌ Unexpected Error: {str(e)}")
 
-# --- Display Results ---
+# --- Display Initial Results ---
 if st.session_state.search_results:
     st.markdown("---")
     st.markdown("## 📋 Search Results")
 
     # CSV export for normal search
     if st.session_state.search_results:
-        # Sort results by score for consistent output
         sorted_results_for_csv = sorted(st.session_state.search_results, key=lambda x: x['score'], reverse=True)
-
         csv_data = "video_file_name,Frame Idx\n"
         for result in sorted_results_for_csv:
             try:
@@ -291,27 +298,16 @@ if st.session_state.search_results:
                 frame_idx = path_parts[-1].split('.')[0]
                 csv_data += f"{video_file_name},{frame_idx}\n"
             except IndexError:
-                # Handle cases where path format is unexpected
                 csv_data += "unknown,unknown\n"
-
-        st.download_button(
-           label="Create File Submission (Normal Search)",
-           data=csv_data,
-           file_name="normal_search_submission.csv",
-           mime="text/csv",
-        )
+        st.download_button("Create File Submission (Normal Search)", csv_data, "normal_search_submission.csv", "text/csv")
 
     sorted_results = sorted(st.session_state.search_results, key=lambda x: x['score'], reverse=True)
-
     for i, result in enumerate(sorted_results):
         with st.container():
             col_img, col_info = st.columns([1, 3])
-
             with col_img:
-                image_displayed = safe_image_display(result['path'], width=200, caption=f"Result {i+1}")
-                if not image_displayed:
+                if not safe_image_display(result['path'], width=200, caption=f"Result {i+1}"):
                     display_image_placeholder(f"Result {i+1}")
-
             with col_info:
                 st.markdown(f"""
                 <div class="result-card">
@@ -322,109 +318,45 @@ if st.session_state.search_results:
                     <p style="margin: 0.5rem 0; color: #666;"><strong>Path:</strong> {result['path']}</p>
                 </div>
                 """, unsafe_allow_html=True)
-
-                if use_temporal:
-                    if st.button(f"Select as Pivot", key=f"pivot_{result.get('key', i)}"):
-                        raw_result = next((r for r in st.session_state.raw_search_results if r.get('key') == result.get('key')), None)
-                        if raw_result:
-                            st.session_state.pivot_frame = raw_result
-                            # Clear previous temporal results when a new pivot is selected
-                            st.session_state.temporal_results = None
-                            st.rerun()
-                        else:
-                            st.error("Could not find the raw result for the selected pivot.")
         st.markdown("<br>", unsafe_allow_html=True)
 
-# --- Temporal Search Execution ---
-if use_temporal and st.session_state.pivot_frame:
-    st.markdown("---")
-    st.markdown("### 🕰️ Temporal Search from Pivot")
-
-    st.write("Pivot Frame:")
-    st.json(st.session_state.pivot_frame)
-
-    if st.button("Search Temporal Event"):
-        if not start_query_temporal or not end_query_temporal:
-            st.error("Please enter both a start and end query for temporal search.")
-        else:
-            with st.spinner("Performing temporal search..."):
-                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/temporal"
-                payload = {
-                    "start_query": start_query_temporal,
-                    "end_query": end_query_temporal,
-                    "pivot_frame": st.session_state.pivot_frame,
-                    "temporal_tolerance": temporal_tolerance,
-                }
-                response = requests.post(endpoint, json=payload, headers={"Content-Type": "application/json"}, timeout=30)
-
-                if response.status_code == 200:
-                    st.session_state.temporal_results = response.json()
-                    st.success("Temporal search complete!")
-                else:
-                    st.error(f"API Error: {response.status_code} - {response.text}")
-
 # --- Display Temporal Results ---
-if st.session_state.temporal_results and st.session_state.temporal_results.get("start_frame") and st.session_state.temporal_results.get("end_frame"):
+if st.session_state.temporal_results:
     st.markdown("---")
-    st.markdown("###  Temporal Search Results")
+    st.markdown("### 🕰️ Temporal Search Results")
 
-    start_frame = st.session_state.temporal_results["start_frame"]
-    end_frame = st.session_state.temporal_results["end_frame"]
+    start_frame = st.session_state.temporal_results.get("start_frame")
+    end_frame = st.session_state.temporal_results.get("end_frame")
 
-    # CSV export for temporal search
-    try:
-        start_path_parts = start_frame['path'].replace('\\', '/').split('/')
-        end_path_parts = end_frame['path'].replace('\\', '/').split('/')
+    if start_frame and end_frame:
+        # CSV export for temporal search
+        try:
+            start_path_parts = start_frame['path'].replace('\\', '/').split('/')
+            end_path_parts = end_frame['path'].replace('\\', '/').split('/')
+            video_file_name = f"{start_path_parts[-3]}/{start_path_parts[-2]}"
+            start_idx = start_path_parts[-1].split('.')[0]
+            end_idx = end_path_parts[-1].split('.')[0]
+            temporal_csv = f"video_file_name,start Idx,end Idx\n{video_file_name},{start_idx},{end_idx}\n"
+            st.download_button("Create File Submission (Temporal Search)", temporal_csv, "temporal_search_submission.csv", "text/csv")
+        except (IndexError, KeyError):
+            st.warning("Could not generate temporal search CSV due to unexpected path format.")
 
-        video_file_name = f"{start_path_parts[-3]}/{start_path_parts[-2]}"
-        start_idx = start_path_parts[-1].split('.')[0]
-        end_idx = end_path_parts[-1].split('.')[0]
-
-        temporal_search_csv = f"video_file_name,start Idx,end Idx\n{video_file_name},{start_idx},{end_idx}\n"
-
-        st.download_button(
-           label="Create File Submission (Temporal Search)",
-           data=temporal_search_csv,
-           file_name="temporal_search_submission.csv",
-           mime="text/csv",
-        )
-    except (IndexError, KeyError):
-        st.warning("Could not generate temporal search CSV due to unexpected path format.")
-
-    # Display frames
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("#### Start Frame")
-        if not safe_image_display(start_frame["path"]):
-            display_image_placeholder("Start Frame")
-        st.markdown(f"<p style='margin: 0.5rem 0; color: #666;'><strong>Path:</strong> {start_frame['path']}</p>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin: 0.5rem 0; color: #666;'><strong>Score:</strong> {start_frame['score']:.3f}</p>", unsafe_allow_html=True)
-
-    with col2:
-        st.markdown("#### End Frame")
-        if not safe_image_display(end_frame["path"]):
-            display_image_placeholder("End Frame")
-        st.markdown(f"<p style='margin: 0.5rem 0; color: #666;'><strong>Path:</strong> {end_frame['path']}</p>", unsafe_allow_html=True)
-        st.markdown(f"<p style='margin: 0.5rem 0; color: #666;'><strong>Score:</strong> {end_frame['score']:.3f}</p>", unsafe_allow_html=True)
-
-    # Pivot selection slider
-    try:
-        start_frame_num = int(start_idx)
-        end_frame_num = int(end_idx)
-        if start_frame_num < end_frame_num:
-            pivot_range = st.slider(
-                "Select Pivot Frame in Range",
-                min_value=start_frame_num,
-                max_value=end_frame_num,
-                value=start_frame_num
-            )
-            st.info(f"Selected Pivot Frame for review: **{pivot_range}**")
-    except (ValueError, IndexError):
-        st.warning("Could not determine frame range for pivot selection.")
-
-elif st.session_state.temporal_results:
-    st.markdown("### Temporal Search Results")
-    st.warning("Temporal search did not return a valid start and end frame.")
+        # Display frames
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown("#### Start Frame")
+            if not safe_image_display(start_frame["path"]):
+                display_image_placeholder("Start Frame")
+            st.markdown(f"<p><strong>Path:</strong> {start_frame['path']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Score:</strong> {start_frame['score']:.3f}</p>", unsafe_allow_html=True)
+        with col2:
+            st.markdown("#### End Frame")
+            if not safe_image_display(end_frame["path"]):
+                display_image_placeholder("End Frame")
+            st.markdown(f"<p><strong>Path:</strong> {end_frame['path']}</p>", unsafe_allow_html=True)
+            st.markdown(f"<p><strong>Score:</strong> {end_frame['score']:.3f}</p>", unsafe_allow_html=True)
+    else:
+        st.warning("Temporal search did not return a valid start and end frame.")
 
 # Footer
 st.markdown("---")

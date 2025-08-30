@@ -199,9 +199,12 @@ class QueryController:
         self,
         start_query: str,
         end_query: str,
-        pivot_frame: KeyframeServiceReponse,
-        temporal_tolerance: int = 3,
+        search_results: list[KeyframeServiceReponse],
+        search_range: tuple[int, int],
     ):
+        """
+        Orchestrates a temporal search on a given list of search results.
+        """
         translated_start_query = self.translator.translate(start_query)
         translated_end_query = self.translator.translate(end_query)
         start_embedding = self.model_service.embedding(translated_start_query).tolist()[0]
@@ -210,8 +213,8 @@ class QueryController:
         start_frame, end_frame = await self.temporal_search_service.search_temporal_event(
             start_query_embedding=start_embedding,
             end_query_embedding=end_embedding,
-            pivot_frame=pivot_frame,
-            temporal_tolerance=temporal_tolerance,
+            search_results=search_results,
+            search_range=search_range,
         )
 
         return start_frame, end_frame
