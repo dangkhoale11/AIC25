@@ -35,18 +35,29 @@ class KeyframeRepository(MongoBaseRepository[Keyframe]):
 
         ]
 
-    async def get_keyframe_by_video_num(
-        self, 
-        video_num: int,
+    async def get_keyframes_by_pivot(
+        self,
+        pivot_frame: KeyframeInterface,
     ):
-        result = await self.find({"video_num": video_num})
+        video_num = pivot_frame.video_num
+        group_num = pivot_frame.group_num
+
+        # Truy vấn tất cả keyframes cùng video_num và group_num (AND)
+        result = await self.find({
+            "$and": [
+                {"video_num": video_num},
+                {"group_num": group_num}
+            ]
+        })
+
         return [
             KeyframeInterface(
                 key=keyframe.key,
                 video_num=keyframe.video_num,
                 group_num=keyframe.group_num,
                 keyframe_num=keyframe.keyframe_num
-            ) for keyframe in result
+            )
+            for keyframe in result
         ]
 
     async def get_keyframe_by_keyframe_num(

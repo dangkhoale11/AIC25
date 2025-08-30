@@ -3,6 +3,10 @@ import requests
 import json
 from typing import List, Optional
 import pandas as pd
+import os
+from PIL import Image
+import base64
+from io import BytesIO
 
 # Page configuration
 st.set_page_config(
@@ -18,7 +22,6 @@ st.markdown("""
     .main > div {
         padding-top: 2rem;
     }
-    
     .search-container {
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         padding: 2rem;
@@ -26,14 +29,12 @@ st.markdown("""
         margin-bottom: 2rem;
         color: white;
     }
-    
     .mode-selector {
         background: rgba(255, 255, 255, 0.1);
         padding: 1rem;
         border-radius: 10px;
         margin: 1rem 0;
     }
-    
     .result-card {
         background: white;
         padding: 1rem;
@@ -42,7 +43,6 @@ st.markdown("""
         margin-bottom: 1rem;
         border-left: 4px solid #667eea;
     }
-    
     .score-badge {
         background: #28a745;
         color: white;
@@ -51,7 +51,6 @@ st.markdown("""
         font-size: 0.8rem;
         font-weight: bold;
     }
-    
     .stButton > button {
         background: linear-gradient(45deg, #667eea, #764ba2);
         color: white;
@@ -61,12 +60,10 @@ st.markdown("""
         font-weight: 600;
         transition: all 0.3s ease;
     }
-    
     .stButton > button:hover {
         transform: translateY(-2px);
         box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
     }
-    
     .metric-container {
         background: rgba(255, 255, 255, 0.9);
         padding: 1rem;
@@ -74,8 +71,64 @@ st.markdown("""
         text-align: center;
         margin: 0.5rem;
     }
+    .image-placeholder {
+        background: #f0f0f0; 
+        height: 150px; 
+        border-radius: 10px; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center;
+        border: 2px dashed #ccc;
+        text-align: center; 
+        color: #666;
+    }
 </style>
 """, unsafe_allow_html=True)
+
+def safe_image_display(image_path: str, width: int = 200, caption: str = ""):
+    """
+    Safely display an image with fallback options
+    """
+    try:
+        # Method 1: Try direct path if it's a valid file
+        if os.path.exists(image_path):
+            st.image(image_path, width=width, caption=caption)
+            return True
+        
+        # Method 2: Try to load from URL if it's a URL
+        elif image_path.startswith(('http://', 'https://')):
+            st.image(image_path, width=width, caption=caption)
+            return True
+        
+        # Method 3: Try to get image from API
+        elif hasattr(st.session_state, 'api_base_url'):
+            try:
+                # Assume there's an endpoint to get the image
+                image_url = f"{st.session_state.api_base_url}/api/v1/keyframe/image?path={image_path}"
+                response = requests.get(image_url, timeout=10)
+                if response.status_code == 200:
+                    image = Image.open(BytesIO(response.content))
+                    st.image(image, width=width, caption=caption)
+                    return True
+            except:
+                pass
+        
+        return False
+    except Exception as e:
+        return False
+
+def display_image_placeholder(caption: str = ""):
+    """
+    Display a placeholder when image can't be loaded
+    """
+    st.markdown(f"""
+    <div class="image-placeholder">
+        <div>
+            🖼️<br>Image Preview<br>Not Available<br>
+            <small style="font-size: 0.8em;">{caption}</small>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 # Initialize session state
 if 'search_results' not in st.session_state:
@@ -84,13 +137,15 @@ if 'raw_search_results' not in st.session_state:
     st.session_state.raw_search_results = []
 if 'api_base_url' not in st.session_state:
     st.session_state.api_base_url = "http://127.0.0.1:8000"
+if 'temporal_results' not in st.session_state:
+    st.session_state.temporal_results = None
 
 # Header
 st.markdown("""
 <div class="search-container">
-    <h1 style="margin: 0; font-size: 2.5rem;">🔍 Keyframe Search</h1>
+    <h1 style="margin: 0; font-size: 2.5rem;">🔍 Advanced Keyframe Search</h1>
     <p style="margin: 0.5rem 0 0 0; font-size: 1.1rem; opacity: 0.9;">
-        Search through video keyframes using semantic similarity
+        A comprehensive UI for semantic, temporal, and reranked search
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -104,261 +159,217 @@ with st.expander("⚙️ API Configuration", expanded=False):
     )
     if api_url != st.session_state.api_base_url:
         st.session_state.api_base_url = api_url
+    
+    image_display_method = st.selectbox(
+        "Image Display Method",
+        options=["Try to load from file path", "Show placeholder only", "Try to load from API endpoint", "Show path as text"],
+        index=0
+    )
 
 # Main search interface
-col1, col2 = st.columns([2, 1])
+query = st.text_input(
+    "🔍 Search Query",
+    placeholder="Enter your search query (e.g., 'person walking in the park')",
+)
 
+col1, col2 = st.columns(2)
 with col1:
-    # Search query
-    query = st.text_input(
-        "🔍 Search Query",
-        placeholder="Enter your search query (e.g., 'person walking in the park')",
-        help="Enter 1-1000 characters describing what you're looking for"
-    )
-    
-    # Search parameters
-    col_param1, col_param2 = st.columns(2)
-    with col_param1:
-        top_k = st.slider("📊 Max Results", min_value=1, max_value=200, value=10)
-    with col_param2:
-        score_threshold = st.slider("🎯 Min Score", min_value=0.0, max_value=1.0, value=0.0, step=0.1)
-
+    top_k = st.slider("📊 Max Results", 1, 500, 10) # Increased max for wider temporal search range
 with col2:
-    # Search mode selector
-    st.markdown("### 🎛️ Search Mode")
-    search_mode = st.selectbox(
-        "Mode",
-        options=["Default", "Exclude Groups", "Include Groups & Videos", "Search with OCR filter"],
-        help="Choose how to filter your search results"
-    )
+    score_threshold = st.slider("🎯 Min Score", 0.0, 1.0, 0.0, 0.1)
 
-# Mode-specific parameters
-if search_mode == "Search with OCR filter":
-    st.markdown("### 📝 OCR Filter")
-    ocr_query = st.text_input(
-        "OCR Search Query",
-        placeholder="Enter search query for OCR content",
-        help="Enter 1-1000 characters to search in OCR text"
-    )
-    ocr_weight = st.slider("⚖️ OCR Weight", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
-elif search_mode == "Exclude Groups":
-    st.markdown("### 🚫 Exclude Groups")
-    exclude_groups_input = st.text_input(
-        "Group IDs to exclude",
-        placeholder="Enter group IDs separated by commas (e.g., 1, 3, 7)",
-        help="Keyframes from these groups will be excluded from results"
-    )
-    
-    # Parse exclude groups
-    exclude_groups = []
-    if exclude_groups_input.strip():
-        try:
-            exclude_groups = [int(x.strip()) for x in exclude_groups_input.split(',') if x.strip()]
-        except ValueError:
-            st.error("Please enter valid group IDs separated by commas")
+# --- Search Modes ---
+st.markdown("---")
+st.markdown("### 🎛️ Search Modes")
 
-elif search_mode == "Include Groups & Videos":
-    st.markdown("### ✅ Include Groups & Videos")
-    
-    col_inc1, col_inc2 = st.columns(2)
-    with col_inc1:
-        include_groups_input = st.text_input(
-            "Group IDs to include",
-            placeholder="e.g., 2, 4, 6",
-            help="Only search within these groups"
-        )
-    
-    with col_inc2:
-        include_videos_input = st.text_input(
-            "Video IDs to include",
-            placeholder="e.g., 101, 102, 203",
-            help="Only search within these videos"
-        )
-    
-    # Parse include groups and videos
-    include_groups = []
-    include_videos = []
-    
-    if include_groups_input.strip():
-        try:
-            include_groups = [int(x.strip()) for x in include_groups_input.split(',') if x.strip()]
-        except ValueError:
-            st.error("Please enter valid group IDs separated by commas")
-    
-    if include_videos_input.strip():
-        try:
-            include_videos = [int(x.strip()) for x in include_videos_input.split(',') if x.strip()]
-        except ValueError:
-            st.error("Please enter valid video IDs separated by commas")
+search_mode = st.radio(
+    "Select Search Mode",
+    ["Normal Search", "Search with Exclude Group", "Search with Group and Video"],
+    horizontal=True
+)
 
-# Search button and logic
+if search_mode == "Search with Exclude Group":
+    exclude_groups_input = st.text_input("Group IDs to exclude", placeholder="e.g., 1, 3, 7")
+    exclude_groups = [int(x.strip()) for x in exclude_groups_input.split(',') if x.strip()] if exclude_groups_input else []
+
+elif search_mode == "Search with Group and Video":
+    col_grp, col_vid = st.columns(2)
+    with col_grp:
+        include_groups_input = st.text_input("Group IDs to include", placeholder="e.g., 2, 4")
+        include_groups = [int(x.strip()) for x in include_groups_input.split(',') if x.strip()] if include_groups_input else []
+        print(include_groups)
+    with col_vid:
+        include_videos_input = st.text_input("Video IDs to include", placeholder="e.g., 101, 203")
+        include_videos = [int(x.strip()) for x in include_videos_input.split(',') if x.strip()] if include_videos_input else []
+
+# --- Reranking Options ---
+st.markdown("---")
+use_rerank = st.toggle("✨ Enable GEM Reranking")
+
+if use_rerank:
+    st.markdown("#### 💎 GEM Reranking Parameters")
+    sim_metric = st.selectbox("Similarity Metric", ["cosine", "dot", "euclid"])
+    p_qe = st.slider("p_qe (Query Expansion Power)", 0.0, 150.0, 3.0, 0.5)
+    p_dr = st.slider("p_dr (Document Refinement Power)", 0.0, 150.0, 3.0, 0.5)
+    m_neighbors = st.slider("m_neighbors (Number of Neighbors)", 0, 20, 5)
+
+# --- Temporal Search Options ---
+st.markdown("---")
+use_temporal = st.toggle("🕰️ Enable Temporal Search")
+
+if use_temporal:
+    st.markdown("#### ⏳ Temporal Search Parameters")
+    start_query_temporal = st.text_input("Start of Event Query", placeholder="e.g., person opens door")
+    end_query_temporal = st.text_input("End of Event Query", placeholder="e.g., person closes door")
+    temporal_search_range = st.slider("Results Range to Search", 0, top_k, (0, 20), help=f"Select the start and end index from the top {top_k} results to perform the temporal search on.")
+
+
+# --- Search Button ---
+st.markdown("---")
 if st.button("🚀 Search", use_container_width=True):
     if not query.strip():
         st.error("Please enter a search query")
-    elif len(query) > 1000:
-        st.error("Query too long. Please keep it under 1000 characters.")
+    elif use_temporal and (not start_query_temporal or not end_query_temporal):
+        st.error("Please enter both a start and end query for temporal search.")
     else:
-        with st.spinner("🔍 Searching for keyframes..."):
-            try:
-                if search_mode == "Default":
-                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search"
-                    payload = {
-                        "query": query,
-                        "top_k": top_k,
-                        "score_threshold": score_threshold
-                    }
-                
-                elif search_mode == "Search with OCR filter":
-                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/ocr-filter"
-                    payload = {
-                        "query": query,
-                        "ocr_query": ocr_query,
-                        "top_k": top_k,
-                        "score_threshold": score_threshold,
-                        "ocr_weight": ocr_weight
-                    }
-                elif search_mode == "Exclude Groups":
-                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
-                    payload = {
-                        "query": query,
-                        "top_k": top_k,
-                        "score_threshold": score_threshold,
-                        "exclude_groups": exclude_groups
-                    }
-                
-                elif search_mode == 'Include Groups & Videos':  # Include Groups & Videos
-                    endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
-                    payload = {
-                        "query": query,
-                        "top_k": top_k,
-                        "score_threshold": score_threshold,
-                        "include_groups": include_groups,
-                        "include_videos": include_videos
-                    }
-                
+        with st.spinner("🔍 Searching..."):
+            # Determine endpoint and base payload
+            if use_rerank:
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/rerank"
+                payload = {
+                    "query": query, "top_k": top_k, "score_threshold": score_threshold,
+                    "rerank_type": "GEM", "p_qe": p_qe, "p_dr": p_dr,
+                    "m_neighbors": m_neighbors, "sim_metric": sim_metric,
+                }
+            elif search_mode == "Normal Search":
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search"
+                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
+            elif search_mode == "Search with Exclude Group":
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
+                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "exclude_groups": exclude_groups}
+            elif search_mode =="Search with Group and Video": # Search with Group and Video
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
+                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "include_groups": include_groups, "include_videos": include_videos}
 
-                response = requests.post(
-                    endpoint,
-                    json=payload,
-                    headers={"Content-Type": "application/json"},
-                    timeout=30
-                )
-                
+            # Add temporal search parameters if enabled
+            if use_temporal:
+                payload.update({
+                    "use_temporal": True,
+                    "temporal_start_query": start_query_temporal,
+                    "temporal_end_query": end_query_temporal,
+                    "temporal_search_range": temporal_search_range,
+                })
+
+            try:
+                response = requests.post(endpoint, json=payload, headers={"Content-Type": "application/json"}, timeout=60)
+
                 if response.status_code == 200:
                     data = response.json()
-                    st.session_state.search_results = data.get("results", [])
-                    st.session_state.raw_search_results = data.get("raw_results", [])
-                    st.success(f"✅ Found {len(st.session_state.search_results)} results!")
+                    # Check if the response is for a temporal search or a normal search
+                    if 'events' in data:
+                        st.session_state.temporal_results = data.get("events", [])
+                        st.session_state.search_results = []
+                        st.session_state.raw_search_results = []
+                        st.success(f"✅ Temporal search complete! Found {len(st.session_state.temporal_results)} events.")
+                    else:
+                        st.session_state.search_results = data.get("results", [])
+                        st.session_state.raw_search_results = data.get("raw_results", [])
+                        st.session_state.temporal_results = None
+                        st.success(f"✅ Found {len(st.session_state.search_results)} results!")
                 else:
                     st.error(f"❌ API Error: {response.status_code} - {response.text}")
-                    
             except requests.exceptions.RequestException as e:
                 st.error(f"❌ Connection Error: {str(e)}")
             except Exception as e:
                 st.error(f"❌ Unexpected Error: {str(e)}")
 
-# Display results
+# --- Display Initial Results ---
 if st.session_state.search_results:
     st.markdown("---")
     st.markdown("## 📋 Search Results")
 
-    if st.session_state.raw_search_results:
-        st.markdown("### 📝 OCR Rerank")
-        rerank_ocr_query = st.text_input(
-            "OCR Rerank Query",
-            placeholder="Enter search query for OCR content to rerank",
-            help="Enter 1-1000 characters to search in OCR text"
-        )
-        rerank_ocr_weight = st.slider("⚖️ OCR Rerank Weight", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
-        if st.button("🔄 Rerank with OCR", use_container_width=True):
-            if not rerank_ocr_query.strip():
-                st.error("Please enter an OCR query to rerank")
-            else:
-                with st.spinner("🔄 Reranking results with OCR..."):
-                    try:
-                        endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/rerank/ocr"
-                        payload = {
-                            "results": st.session_state.raw_search_results,
-                            "ocr_query": rerank_ocr_query,
-                            "top_k": top_k,
-                            "ocr_weight": rerank_ocr_weight
-                        }
-                        response = requests.post(
-                            endpoint,
-                            json=payload,
-                            headers={"Content-Type": "application/json"},
-                            timeout=30
-                        )
-                        if response.status_code == 200:
-                            data = response.json()
-                            st.session_state.search_results = data.get("results", [])
-                            st.success(f"✅ Reranked and found {len(st.session_state.search_results)} results!")
-                        else:
-                            st.error(f"❌ API Error: {response.status_code} - {response.text}")
-                    except requests.exceptions.RequestException as e:
-                        st.error(f"❌ Connection Error: {str(e)}")
-                    except Exception as e:
-                        st.error(f"❌ Unexpected Error: {str(e)}")
+    # CSV export for normal search
+    if st.session_state.search_results:
+        sorted_results_for_csv = sorted(st.session_state.search_results, key=lambda x: x['score'], reverse=True)
+        csv_data = "video_file_name,Frame Idx\n"
+        for result in sorted_results_for_csv:
+            try:
+                path_parts = result['path'].replace('\\', '/').split('/')
+                video_file_name = f"{path_parts[-3]}_{path_parts[-2]}"
+                frame_idx = path_parts[-1].split('.')[0]
+                csv_data += f"{video_file_name},{frame_idx}\n"
+            except IndexError:
+                csv_data += "unknown,unknown\n"
+        st.download_button("Create File Submission (Normal Search)", csv_data, "normal_search_submission.csv", "text/csv")
 
-    
-    # Results summary
-    col_metric1, col_metric2, col_metric3 = st.columns(3)
-    
-    with col_metric1:
-        st.metric("Total Results", len(st.session_state.search_results))
-    
-    with col_metric2:
-        avg_score = sum(result['score'] for result in st.session_state.search_results) / len(st.session_state.search_results)
-        st.metric("Average Score", f"{avg_score:.3f}")
-    
-    with col_metric3:
-        max_score = max(result['score'] for result in st.session_state.search_results)
-        st.metric("Best Score", f"{max_score:.3f}")
-    
-    # Sort by score (highest first)
     sorted_results = sorted(st.session_state.search_results, key=lambda x: x['score'], reverse=True)
-    
-    # Display results in a grid
     for i, result in enumerate(sorted_results):
         with st.container():
             col_img, col_info = st.columns([1, 3])
-            
             with col_img:
-                # Try to display image if path is accessible
-                try:
-                    st.image(result['path'], width=200, caption=f"Keyframe {i+1}")
-                except:
-                    st.markdown(f"""
-                    <div style="
-                        background: #f0f0f0; 
-                        height: 150px; 
-                        border-radius: 10px; 
-                        display: flex; 
-                        align-items: center; 
-                        justify-content: center;
-                        border: 2px dashed #ccc;
-                    ">
-                        <div style="text-align: center; color: #666;">
-                            🖼️<br>Image Preview<br>Not Available
-                        </div>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
+                if not safe_image_display(result['path'], width=200, caption=f"Result {i+1}"):
+                    display_image_placeholder(f"Result {i+1}")
             with col_info:
                 st.markdown(f"""
                 <div class="result-card">
-                    <div style="display: flex; justify-content: between; align-items: center; margin-bottom: 0.5rem;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
                         <h4 style="margin: 0; color: #333;">Result #{i+1}</h4>
                         <span class="score-badge">Score: {result['score']:.3f}</span>
                     </div>
                     <p style="margin: 0.5rem 0; color: #666;"><strong>Path:</strong> {result['path']}</p>
-                    <div style="background: #f8f9fa; padding: 0.5rem; border-radius: 5px; font-family: monospace; font-size: 0.9rem;">
-                        {result['path'].split('/')[-1]}
-                    </div>
                 </div>
                 """, unsafe_allow_html=True)
-        
         st.markdown("<br>", unsafe_allow_html=True)
+
+# --- Display Temporal Results ---
+if st.session_state.temporal_results:
+    st.markdown("---")
+    st.markdown("### 🕰️ Temporal Search Results")
+
+    events = st.session_state.temporal_results
+    if events:
+        # CSV export for temporal search
+        try:
+            temporal_csv_data = "video_file_name,start_Idx,end_Idx\n"
+            for event in events:
+                start_frame = event.get("start_frame")
+                end_frame = event.get("end_frame")
+                if start_frame and end_frame:
+                    start_path_parts = start_frame['path'].replace('\\', '/').split('/')
+                    end_path_parts = end_frame['path'].replace('\\', '/').split('/')
+                    video_file_name = f"{start_path_parts[-3]}_{start_path_parts[-2]}"
+                    start_idx = start_path_parts[-1].split('.')[0]
+                    end_idx = end_path_parts[-1].split('.')[0]
+                    temporal_csv_data += f"{video_file_name},{start_idx},{end_idx}\n"
+            st.download_button("Create File Submission (Temporal Search)", temporal_csv_data, "temporal_search_submission.csv", "text/csv")
+        except (IndexError, KeyError):
+            st.warning("Could not generate temporal search CSV due to unexpected path format.")
+
+        # Display frames
+        for i, event in enumerate(events):
+            st.markdown(f"#### Event #{i+1}")
+            start_frame = event.get("start_frame")
+            end_frame = event.get("end_frame")
+
+            if start_frame and end_frame:
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("##### Start Frame")
+                    if not safe_image_display(start_frame["path"]):
+                        display_image_placeholder("Start Frame")
+                    st.markdown(f"<p><strong>Path:</strong> {start_frame['path']}</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p><strong>Score:</strong> {start_frame['score']:.3f}</p>", unsafe_allow_html=True)
+                with col2:
+                    st.markdown("##### End Frame")
+                    if not safe_image_display(end_frame["path"]):
+                        display_image_placeholder("End Frame")
+                    st.markdown(f"<p><strong>Path:</strong> {end_frame['path']}</p>", unsafe_allow_html=True)
+                    st.markdown(f"<p><strong>Score:</strong> {end_frame['score']:.3f}</p>", unsafe_allow_html=True)
+            else:
+                st.warning(f"Event #{i+1} did not return a valid start and end frame.")
+            st.markdown("---")
+    else:
+        st.warning("Temporal search did not return any valid events.")
 
 # Footer
 st.markdown("---")

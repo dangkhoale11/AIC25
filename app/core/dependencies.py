@@ -17,6 +17,7 @@ sys.path.insert(0, ROOT_DIR)
 
 from controller.query_controller import QueryController
 from service import ModelService, KeyframeQueryService
+from service.temporal_search_service import TemporalSearchService
 from core.settings import KeyFrameIndexMilvusSetting, MongoDBSettings, AppSettings
 from factory.factory import ServiceFactory
 from core.logger import SimpleLogger
@@ -96,6 +97,24 @@ def get_keyframe_service(service_factory: ServiceFactory = Depends(get_service_f
         )
 
 
+def get_temporal_search_service(service_factory: ServiceFactory = Depends(get_service_factory)) -> TemporalSearchService:
+    """Get temporal search service from ServiceFactory"""
+    try:
+        temporal_search_service = service_factory.get_temporal_search_service()
+        if temporal_search_service is None:
+            logger.error("Temporal search service not available from factory")
+            raise HTTPException(
+                status_code=503,
+                detail="Temporal search service not available"
+            )
+        return temporal_search_service
+    except Exception as e:
+        logger.error(f"Failed to get temporal search service: {str(e)}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Temporal search service initialization failed: {str(e)}"
+        )
+
 
 def get_mongo_client(request: Request):
     """Get MongoDB client from app state"""
@@ -141,6 +160,7 @@ def get_milvus_repository(service_factory: ServiceFactory = Depends(get_service_
 def get_query_controller(
     model_service: ModelService = Depends(get_model_service),
     keyframe_service: KeyframeQueryService = Depends(get_keyframe_service),
+    temporal_search_service: TemporalSearchService = Depends(get_temporal_search_service),
     milvus_settings: KeyFrameIndexMilvusSetting = Depends(get_milvus_settings),
     app_settings: AppSettings = Depends(get_app_settings)
 ) -> QueryController:
@@ -165,7 +185,8 @@ def get_query_controller(
             data_folder=data_folder,
             id2index_path=id2index_path,
             model_service=model_service,
-            keyframe_service=keyframe_service
+            keyframe_service=keyframe_service,
+            temporal_search_service=temporal_search_service
         )
         
         logger.info("Query controller created successfully")

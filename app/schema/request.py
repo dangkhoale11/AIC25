@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 
 class BaseSearchRequest(BaseModel):
@@ -9,12 +9,20 @@ class BaseSearchRequest(BaseModel):
     score_threshold: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum confidence score threshold")
 
 
-class TextSearchRequest(BaseSearchRequest):
+class TemporalSearchMixin(BaseModel):
+    """Mixin for enabling temporal search on initial results"""
+    use_temporal: bool = Field(default=False, description="Flag to enable temporal search on initial results")
+    temporal_start_query: Optional[str] = Field(None, description="The start query for temporal search")
+    temporal_end_query: Optional[str] = Field(None, description="The end query for temporal search")
+    temporal_search_range: Optional[Tuple[int, int]] = Field(default=(0, 20), description="The start and end index of initial results to search within")
+
+
+class TextSearchRequest(BaseSearchRequest, TemporalSearchMixin):
     """Simple text search request"""
     pass
 
 
-class TextSearchWithExcludeGroupsRequest(BaseSearchRequest):
+class TextSearchWithExcludeGroupsRequest(BaseSearchRequest, TemporalSearchMixin):
     """Text search request with group exclusion"""
     exclude_groups: List[int] = Field(
         default_factory=list,
@@ -39,7 +47,7 @@ class OcrRerankRequest(BaseModel):
     ocr_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for OCR score in re-ranking")
 
 
-class TextSearchWithSelectedGroupsAndVideosRequest(BaseSearchRequest):
+class TextSearchWithSelectedGroupsAndVideosRequest(BaseSearchRequest, TemporalSearchMixin):
     """Text search request with specific group and video selection"""
     include_groups: List[int] = Field(
         default_factory=list,
@@ -51,3 +59,11 @@ class TextSearchWithSelectedGroupsAndVideosRequest(BaseSearchRequest):
     )
 
 
+class RerankSearchRequest(BaseSearchRequest, TemporalSearchMixin):
+    """Request for search with reranking"""
+    rerank_type: str = Field(..., description="The reranking method to use (e.g., 'ocr', 'gem')")
+    ocr_query: Optional[str] = Field(None, description="OCR search query text, required for OCR rerank")
+    p_qe: float = Field(default=3.0, description="Power for query expansion in GEM reranking")
+    p_dr: float = Field(default=3.0, description="Power for document refinement in GEM reranking")
+    m_neighbors: int = Field(default=5, description="Number of neighbors for document refinement in GEM reranking")
+    sim_metric: str = Field(default="cosine", description="Similarity metric for GEM reranking")
