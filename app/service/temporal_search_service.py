@@ -48,45 +48,54 @@ class TemporalSearchService:
         end_query_embedding: list[float],
         search_results: List[KeyframeServiceReponse],
         search_range: tuple[int, int],
+        window_size: int = 10,
     ):
         """
-        Performs a temporal-style search on a slice of initial search results.
+        Performs a temporal search using a sliding window approach around pivot points.
         """
-        start_range, end_range = search_range
+        start_idx, end_idx = search_range
 
-        # 1. Slice the initial search results based on the provided range
-        # Ensure range is valid
-        if not (0 <= start_range < end_range <= len(search_results)):
+        if not (0 <= start_idx < end_idx <= len(search_results)):
             return None, None
 
-        results_slice = search_results[start_range:end_range]
+        candidate_start_frames = []
+        candidate_end_frames = []
 
-        if not results_slice:
-            return None, None
-
-        # 2. Get embeddings for the frames in the slice
-        frame_ids = [k.key for k in results_slice]
-        frame_embeddings = await self.keyframe_vector_repo.get_embeddings_by_ids(frame_ids)
-
-        if not frame_embeddings:
-            return None, None
-
-        # 3. Convert embeddings to numpy arrays for calculation
-        frame_embeddings_np = [np.array(fe, dtype=np.float32) for fe in frame_embeddings]
         start_query_embedding_np = np.array(start_query_embedding, dtype=np.float32)
         end_query_embedding_np = np.array(end_query_embedding, dtype=np.float32)
 
-        # 4. Find the best match for the start and end queries within the slice
-        start_frame, _ = await self._find_best_match_in_slice(
-            query_embedding=start_query_embedding_np,
-            frames=results_slice,
-            frame_embeddings=frame_embeddings_np,
-        )
+        for pivot_idx in range(start_idx, end_idx):
+            window_start = max(0, pivot_idx - window_size)
+            window_end = min(len(search_results), pivot_idx + window_size + 1)
 
-        end_frame, _ = await self._find_best_match_in_slice(
-            query_embedding=end_query_embedding_np,
-            frames=results_slice,
-            frame_embeddings=frame_embeddings_np,
-        )
+            results_slice = search_results[window_start:window_end]
+            if not results_slice:
+                continue
 
-        return start_frame, end_frame
+            frame_ids = [k.key for k in results_slice]
+            frame_embeddings = await self.keyframe_vector_repo.get_embeddings_by_ids(frame_ids)
+            if not frame_embeddings:
+                continue
+
+            frame_embeddings_np = [np.array(fe, dtype=np.float32) for fe in frame_embeddings]
+
+            start_frame, start_score = await self._find_best_match_in_slice(
+                query_embedding=start_query_embedding_np,
+                frames=results_slice,
+                frame_embeddings=frame_embeddings_np,
+            )
+            if start_frame:
+                candidate_start_frames.append(start_frame)
+
+            end_frame, end_score = await self._find_best_match_in_slice(
+                query_embedding=end_query_embedding_np,
+                frames=results_slice,
+                frame_embeddings=frame_embeddings_np,
+            )
+            if end_frame:
+                candidate_end_frames.append(end_frame)
+
+        best_start_frame = max(candidate_start_frames, key=lambda f: f.confidence_score, default=None)
+        best_end_frame = max(candidate_end_frames, key=lambda f: f.confidence_score, default=None)
+
+        return best_start_frame, best_end_frame
