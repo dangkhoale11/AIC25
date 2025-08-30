@@ -56,9 +56,14 @@ class TemporalSearchRequest(BaseModel):
     start_query: str = Field(..., description="Search query for the start of the event")
     end_query: str = Field(..., description="Search query for the end of the event")
     pivot_frame: KeyframeServiceReponse = Field(..., description="The pivot keyframe for the temporal search")
+    temporal_tolerance: int = Field(default=3, description="Temporal search tolerance")
 
 
 class RerankSearchRequest(BaseSearchRequest):
     """Request for search with reranking"""
     rerank_type: str = Field(..., description="The reranking method to use (e.g., 'ocr', 'gem')")
     ocr_query: Optional[str] = Field(None, description="OCR search query text, required for OCR rerank")
+    p_qe: float = Field(default=3.0, description="Power for query expansion in GEM reranking")
+    p_dr: float = Field(default=3.0, description="Power for document refinement in GEM reranking")
+    m_neighbors: int = Field(default=5, description="Number of neighbors for document refinement in GEM reranking")
+    sim_metric: str = Field(default="cosine", description="Similarity metric for GEM reranking")

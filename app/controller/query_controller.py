@@ -67,6 +67,10 @@ class QueryController:
         score_threshold: float,
         rerank_type: str,
         ocr_query: str | None = None,
+        p_qe: float = 3.0,
+        p_dr: float = 3.0,
+        m_neighbors: int = 5,
+        sim_metric: str = "cosine",
     ):
         translated_query = self.translator.translate(query)
         text_embedding = self.model_service.embedding(translated_query).tolist()[0]
@@ -82,6 +86,10 @@ class QueryController:
             score_threshold=score_threshold,
             method=rerank_type,
             ocr_embedding=ocr_embedding,
+            p_qe=p_qe,
+            p_dr=p_dr,
+            m_neighbors=m_neighbors,
+            sim_metric=sim_metric,
         )
         return result
 
@@ -192,6 +200,7 @@ class QueryController:
         start_query: str,
         end_query: str,
         pivot_frame: KeyframeServiceReponse,
+        temporal_tolerance: int = 3,
     ):
         translated_start_query = self.translator.translate(start_query)
         translated_end_query = self.translator.translate(end_query)
@@ -202,6 +211,7 @@ class QueryController:
             start_query_embedding=start_embedding,
             end_query_embedding=end_embedding,
             pivot_frame=pivot_frame,
+            temporal_tolerance=temporal_tolerance,
         )
 
         return start_frame, end_frame

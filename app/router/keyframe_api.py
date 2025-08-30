@@ -56,6 +56,10 @@ async def search_with_rerank(
         score_threshold=request.score_threshold,
         rerank_type=request.rerank_type,
         ocr_query=request.ocr_query,
+        p_qe=request.p_qe,
+        p_dr=request.p_dr,
+        m_neighbors=request.m_neighbors,
+        sim_metric=request.sim_metric,
     )
 
     # logger.info(f"Found {len(results)} results with {request.rerank_type} reranking")
@@ -372,6 +376,7 @@ async def search_temporal_event(
         start_query=request.start_query,
         end_query=request.end_query,
         pivot_frame=request.pivot_frame,
+        temporal_tolerance=request.temporal_tolerance,
     )
     
     start_frame_display = None

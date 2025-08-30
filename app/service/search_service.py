@@ -258,9 +258,10 @@ class KeyframeQueryService:
         initial_results: list,
         query_embedding: list[float],
         top_k: int,
-        M: int = 2,   # số lượng hàng xóm để refine
-        p: float = 1.0,  # tham số pooling
-        sim_metric: str = "cosine"  # "cosine" | "dot" | "euclid"
+        m_neighbors: int = 2,
+        p_qe: float = 1.0,
+        p_dr: float = 1.0,
+        sim_metric: str = "cosine"
     ):
         if not initial_results:
             return []
@@ -276,13 +277,13 @@ class KeyframeQueryService:
         )
         n, d = frame_embs.shape
 
-        # Nếu M > số lượng frame thì giới hạn lại
-        if M is None or M > n - 1:
-            M = max(0, n - 1)
+        # Nếu m_neighbors > số lượng frame thì giới hạn lại
+        if m_neighbors is None or m_neighbors > n - 1:
+            m_neighbors = max(0, n - 1)
 
         # ----- Query refine (g_qe) -----
         qe_vectors = np.vstack([g_q.reshape(1, -1), frame_embs])
-        g_qe = self.gem_pooling_batch(qe_vectors, p=100.0)
+        g_qe = self.gem_pooling_batch(qe_vectors, p=p_qe)
 
         # ----- similarity matrix (luôn dùng cosine để chọn neighbor) -----
         norms = np.linalg.norm(frame_embs, axis=1, keepdims=True) + 1e-12
@@ -302,14 +303,14 @@ class KeyframeQueryService:
         for idx, res in enumerate(initial_results):
             g_d = frame_embs[idx]
 
-            # ----- Lấy M neighbors của frame idx -----
+            # ----- Lấy m_neighbors neighbors của frame idx -----
             sims = sim_matrix[idx]
-            if M == 0:
+            if m_neighbors == 0:
                 neighbor_indices = []
-            elif M >= n - 1:
+            elif m_neighbors >= n - 1:
                 neighbor_indices = [i for i in range(n) if i != idx]
             else:
-                part = np.argpartition(-sims, M)[:M]
+                part = np.argpartition(-sims, m_neighbors)[:m_neighbors]
                 neighbor_indices = part[np.argsort(-sims[part])]
 
             # ----- Tính g_dr -----
@@ -317,7 +318,7 @@ class KeyframeQueryService:
                 g_dr = g_d.copy()
             else:
                 dr_vectors = np.vstack([g_d.reshape(1, -1), frame_embs[neighbor_indices]])
-                g_dr = self.gem_pooling_batch(dr_vectors, p=1.0)
+                g_dr = self.gem_pooling_batch(dr_vectors, p=p_dr)
 
             # ----- Score -----
             S1 = sim_fn(g_q, g_dr)   # query gốc vs frame refine
@@ -341,10 +342,17 @@ class KeyframeQueryService:
         method: str = "GEM",   # "ocr" | "gem" | "temporal"
         ocr_embedding: list[float] = None,
         score_threshold: float = 0.5,
+        p_qe: float = 3.0,
+        p_dr: float = 3.0,
+        m_neighbors: int = 5,
+        sim_metric: str = "cosine",
     ):
         initial_results = await self._search_keyframes(text_embedding, top_k, score_threshold)
 
         # if method == "OCR" and ocr_embedding is not None:
         #     return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k)
         if method == "GEM":
-            return await self.rerank_by_gem(initial_results, text_embedding, top_k)
+            return await self.rerank_by_gem(
+                initial_results, text_embedding, top_k,
+                m_neighbors=m_neighbors, p_qe=p_qe, p_dr=p_dr, sim_metric=sim_metric
+            )

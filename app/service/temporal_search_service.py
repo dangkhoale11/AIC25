@@ -58,6 +58,7 @@ class TemporalSearchService:
         start_query_embedding: list[float],
         end_query_embedding: list[float],
         pivot_frame: KeyframeServiceReponse,
+        temporal_tolerance: int = 3,
     ):
         # 1. Get all keyframes from the same video as the pivot frame
         video_num = pivot_frame.video_num
@@ -93,6 +94,7 @@ class TemporalSearchService:
             frame_embeddings=frame_embeddings_np,
             pivot_index=pivot_index,
             direction="backward",
+            threshold=temporal_tolerance,
         )
 
         end_idx = await self._adaptive_temporal_search(
@@ -101,6 +103,7 @@ class TemporalSearchService:
             frame_embeddings=frame_embeddings_np,
             pivot_index=pivot_index,
             direction="forward",
+            threshold=temporal_tolerance,
         )
 
         # 4. Lấy ra frame object rồi wrap thành KeyframeServiceReponse
