@@ -197,6 +197,7 @@ elif search_mode == "Search with Group and Video":
     with col_grp:
         include_groups_input = st.text_input("Group IDs to include", placeholder="e.g., 2, 4")
         include_groups = [int(x.strip()) for x in include_groups_input.split(',') if x.strip()] if include_groups_input else []
+        print(include_groups)
     with col_vid:
         include_videos_input = st.text_input("Video IDs to include", placeholder="e.g., 101, 203")
         include_videos = [int(x.strip()) for x in include_videos_input.split(',') if x.strip()] if include_videos_input else []
@@ -246,7 +247,7 @@ if st.button("🚀 Search", use_container_width=True):
             elif search_mode == "Search with Exclude Group":
                 endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
                 payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "exclude_groups": exclude_groups}
-            else: # Search with Group and Video
+            elif search_mode =="Search with Group and Video": # Search with Group and Video
                 endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
                 payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "include_groups": include_groups, "include_videos": include_videos}
 
@@ -294,7 +295,7 @@ if st.session_state.search_results:
         for result in sorted_results_for_csv:
             try:
                 path_parts = result['path'].replace('\\', '/').split('/')
-                video_file_name = f"{path_parts[-3]}/{path_parts[-2]}"
+                video_file_name = f"{path_parts[-3]}_{path_parts[-2]}"
                 frame_idx = path_parts[-1].split('.')[0]
                 csv_data += f"{video_file_name},{frame_idx}\n"
             except IndexError:
@@ -336,7 +337,7 @@ if st.session_state.temporal_results:
                 if start_frame and end_frame:
                     start_path_parts = start_frame['path'].replace('\\', '/').split('/')
                     end_path_parts = end_frame['path'].replace('\\', '/').split('/')
-                    video_file_name = f"{start_path_parts[-3]}/{start_path_parts[-2]}"
+                    video_file_name = f"{start_path_parts[-3]}_{start_path_parts[-2]}"
                     start_idx = start_path_parts[-1].split('.')[0]
                     end_idx = end_path_parts[-1].split('.')[0]
                     temporal_csv_data += f"{video_file_name},{start_idx},{end_idx}\n"

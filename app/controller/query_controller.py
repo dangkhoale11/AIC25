@@ -119,44 +119,67 @@ class QueryController:
         query: str,
         top_k: int,
         score_threshold: float,
-        list_of_include_groups: list[int]  ,
-        list_of_include_videos: list[int]  
-    ):     
-        
+        list_of_include_groups: list[int],
+        list_of_include_videos: list[int]
+    ):
+        """
+        Search keyframes with optional filtering by groups and/or videos.
+        """
 
-        exclude_ids = None
-        if len(list_of_include_groups) > 0   and len(list_of_include_videos) == 0:
-            print("hi")
+        # --- Bước 1: Chuẩn bị exclude_ids (giữ nguyên string key) ---
+        exclude_ids: list[str] = []
+
+        if list_of_include_groups and not list_of_include_videos:
+            # Lọc theo group
             exclude_ids = [
-                int(k) for k, v in self.id2index.items()
+                k for k, v in self.id2index.items()
                 if int(v.split('/')[0]) not in list_of_include_groups
             ]
-        
-        elif len(list_of_include_groups) == 0   and len(list_of_include_videos) >0 :
+
+        elif not list_of_include_groups and list_of_include_videos:
+            # Lọc theo video
             exclude_ids = [
-                int(k) for k, v in self.id2index.items()
+                k for k, v in self.id2index.items()
                 if int(v.split('/')[1]) not in list_of_include_videos
             ]
 
-        elif len(list_of_include_groups) == 0  and len(list_of_include_videos) == 0 :
+        elif not list_of_include_groups and not list_of_include_videos:
+            # Không exclude gì cả
             exclude_ids = []
+
         else:
+            # Có cả group lẫn video → loại bỏ những cái không nằm trong cả 2
             exclude_ids = [
-                int(k) for k, v in self.id2index.items()
+                k for k, v in self.id2index.items()
                 if (
                     int(v.split('/')[0]) not in list_of_include_groups or
                     int(v.split('/')[1]) not in list_of_include_videos
                 )
             ]
 
-            print(len(exclude_ids))
+        # logger.info(f"Exclude {len(exclude_ids)} ids out of {len(self.id2index)} total")
 
+        # --- Bước 2: Embed query ---
         translated_query = self.translator.translate(query)
         embedding = self.model_service.embedding(translated_query).tolist()[0]
-        # print(exclude_ids)
-        result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
-        return result
-    
+
+        # --- Bước 3: Search vector DB ---
+        results = await self.keyframe_service.search_by_text_exclude_ids(
+            embedding,
+            top_k,
+            score_threshold,
+            exclude_ids
+        )
+
+        # --- Bước 4: Safety filter hậu kiểm ---
+        results = [
+            r for r in results
+            if (not list_of_include_groups or r.group_num in list_of_include_groups)
+            and (not list_of_include_videos or r.video_num in list_of_include_videos)
+        ]
+
+        return results
+        
 
     
 
