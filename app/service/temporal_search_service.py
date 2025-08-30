@@ -51,7 +51,10 @@ class TemporalSearchService:
                 if tolerance >= threshold:
                     break
 
-        return best_idx
+        if best_idx == pivot_index:
+            best_score = self._cos_sim(query_embedding, frame_embeddings[pivot_index])
+
+        return best_idx, best_score
 
     async def search_temporal_event(
         self,
@@ -88,7 +91,7 @@ class TemporalSearchService:
             return None, None # Pivot not found in the video, should not happen
 
         # 3. Perform temporal search
-        start_idx = await self._adaptive_temporal_search(
+        start_idx, start_score = await self._adaptive_temporal_search(
             query_embedding=start_query_embedding_np,
             frames=sorted_keyframes,
             frame_embeddings=frame_embeddings_np,
@@ -97,7 +100,7 @@ class TemporalSearchService:
             threshold=temporal_tolerance,
         )
 
-        end_idx = await self._adaptive_temporal_search(
+        end_idx, end_score = await self._adaptive_temporal_search(
             query_embedding=end_query_embedding_np,
             frames=sorted_keyframes,
             frame_embeddings=frame_embeddings_np,
@@ -107,13 +110,16 @@ class TemporalSearchService:
         )
 
         # 4. Lấy ra frame object rồi wrap thành KeyframeServiceReponse
-        def to_service_response(frame) -> KeyframeServiceReponse:
+        def to_service_response(frame, score) -> KeyframeServiceReponse:
             return KeyframeServiceReponse(
                 key=frame.key,
                 video_num=frame.video_num,
                 group_num=frame.group_num,
                 keyframe_num=frame.keyframe_num,
-                confidence_score=getattr(frame, "confidence_score", 1.0)
+                confidence_score=score
             )
 
-        return to_service_response(sorted_keyframes[start_idx]), to_service_response(sorted_keyframes[end_idx])
+        start_frame = to_service_response(sorted_keyframes[start_idx], start_score)
+        end_frame = to_service_response(sorted_keyframes[end_idx], end_score)
+
+        return start_frame, end_frame
