@@ -1,6 +1,7 @@
 import os
 import sys
 import numpy as np
+from typing import List
 ROOT_DIR = os.path.abspath(
     os.path.join(
         os.path.dirname(__file__), '../'
@@ -15,6 +16,11 @@ from repository.mongo import KeyframeRepository
 
 from schema.response import KeyframeServiceReponse
 
+
+from sklearn.metrics.pairwise import cosine_similarity
+
+
+
 class KeyframeQueryService:
     def __init__(
             self, 
@@ -28,17 +34,6 @@ class KeyframeQueryService:
         self.keyframe_mongo_repo= keyframe_mongo_repo
         self.ocr_vector_repo = ocr_vector_repo
 
-
-    def _cos_sim(self, a: np.ndarray, b: np.ndarray) -> float:
-        """
-        Compute cosine similarity between two vectors.
-        """
-        if a is None or b is None:
-            return 0.0
-        denom = (np.linalg.norm(a) * np.linalg.norm(b))
-        if denom == 0:
-            return 0.0
-        return float(np.dot(a, b) / denom)
     
     
     async def _retrieve_keyframes(self, ids: list[int]):
@@ -199,45 +194,143 @@ class KeyframeQueryService:
 
         return sorted_results
 
-    # ------------------------
-    # GEM Rerank
-    # ------------------------
+
+    def gem_pooling_batch(self, vectors: np.ndarray, p: float = 1.0) -> np.ndarray:
+        """
+        Generalized Mean (GeM) pooling trên batch vector.
+        Args:
+            vectors (np.ndarray): shape (N, D)
+            p (float): tham số pooling
+                    - p=1: mean pooling
+                    - p lớn: gần max pooling
+                    - p=np.inf: max pooling
+        Returns:
+            np.ndarray: vector sau pooling (chưa normalize)
+        """
+        if vectors is None or len(vectors) == 0:
+            return np.array([], dtype=np.float32)
+
+        epsilon = 1e-12
+        vectors = np.abs(vectors) + epsilon
+
+        if np.isinf(p):
+            result = np.max(vectors, axis=0)
+        else:
+            powered = np.power(vectors, p)
+            mean_powered = np.mean(powered, axis=0)
+            result = np.power(mean_powered, 1.0 / p)
+
+        return result.astype(np.float32)
+
+    # ----- similarity metrics -----
+    def _cos_sim(self, a: np.ndarray, b: np.ndarray) -> float:
+        if a is None or b is None:
+            return 0.0
+        try:
+            a = a.reshape(1, -1)
+            b = b.reshape(1, -1)
+            return float(cosine_similarity(a, b)[0][0])
+        except Exception:
+            return 0.0
+
+    def _dot_sim(self, a: np.ndarray, b: np.ndarray) -> float:
+        if a is None or b is None:
+            return 0.0
+        try:
+            a = a.reshape(-1)
+            b = b.reshape(-1)
+            return float(np.dot(a, b))
+        except Exception:
+            return 0.0
+
+    def _neg_euclid_sim(self, a: np.ndarray, b: np.ndarray) -> float:
+        if a is None or b is None:
+            return 0.0
+        try:
+            a = a.reshape(-1)
+            b = b.reshape(-1)
+            return -float(np.linalg.norm(a - b))
+        except Exception:
+            return 0.0
+
     async def rerank_by_gem(
         self,
-        initial_results: list[KeyframeServiceReponse],
+        initial_results: list,
         query_embedding: list[float],
         top_k: int,
-        alpha: float = 0.7,
+        M: int = 2,   # số lượng hàng xóm để refine
+        p: float = 1.0,  # tham số pooling
+        sim_metric: str = "cosine"  # "cosine" | "dot" | "euclid"
     ):
         if not initial_results:
             return []
 
+        # ----- Query embedding g_q -----
+        g_q = np.array(query_embedding, dtype=np.float32)
+
+        # ----- Lấy embedding của các keyframe -----
         frame_ids = [res.key for res in initial_results]
-        frame_embeddings = await self.keyframe_vector_repo.get_embeddings_by_ids(frame_ids)
-        frame_embs = [np.array(fe, dtype=np.float32) for fe in frame_embeddings]
+        frame_embs = np.array(
+            await self.keyframe_vector_repo.get_embeddings_by_ids(frame_ids),
+            dtype=np.float32
+        )
+        n, d = frame_embs.shape
 
-        q = np.array(query_embedding, dtype=np.float32)
+        # Nếu M > số lượng frame thì giới hạn lại
+        if M is None or M > n - 1:
+            M = max(0, n - 1)
 
-        n = len(frame_ids)
-        frame_sim_matrix = np.zeros((n, n))
-        for i in range(n):
-            for j in range(i, n):
-                sim = self._cos_sim(frame_embs[i], frame_embs[j])
-                frame_sim_matrix[i, j] = sim
-                frame_sim_matrix[j, i] = sim
+        # ----- Query refine (g_qe) -----
+        qe_vectors = np.vstack([g_q.reshape(1, -1), frame_embs])
+        g_qe = self.gem_pooling_batch(qe_vectors, p=100.0)
+
+        # ----- similarity matrix (luôn dùng cosine để chọn neighbor) -----
+        norms = np.linalg.norm(frame_embs, axis=1, keepdims=True) + 1e-12
+        frame_embs_norm = frame_embs / norms
+        sim_matrix = frame_embs_norm @ frame_embs_norm.T
+        np.fill_diagonal(sim_matrix, -np.inf)
+
+        # chọn metric
+        if sim_metric == "cosine":
+            sim_fn = self._cos_sim
+        elif sim_metric == "euclid":
+            sim_fn = self._neg_euclid_sim
+        else:
+            sim_fn = self._dot_sim
 
         combined_results = []
         for idx, res in enumerate(initial_results):
-            f_emb = frame_embs[idx]
-            sim_qf = self._cos_sim(q, f_emb)
-            sim_global = float(np.mean(frame_sim_matrix[idx]))
-            gem_score = alpha * sim_qf + (1 - alpha) * sim_global
-            res.confidence_score = gem_score
+            g_d = frame_embs[idx]
+
+            # ----- Lấy M neighbors của frame idx -----
+            sims = sim_matrix[idx]
+            if M == 0:
+                neighbor_indices = []
+            elif M >= n - 1:
+                neighbor_indices = [i for i in range(n) if i != idx]
+            else:
+                part = np.argpartition(-sims, M)[:M]
+                neighbor_indices = part[np.argsort(-sims[part])]
+
+            # ----- Tính g_dr -----
+            if len(neighbor_indices) == 0:
+                g_dr = g_d.copy()
+            else:
+                dr_vectors = np.vstack([g_d.reshape(1, -1), frame_embs[neighbor_indices]])
+                g_dr = self.gem_pooling_batch(dr_vectors, p=1.0)
+
+            # ----- Score -----
+            S1 = sim_fn(g_q, g_dr)   # query gốc vs frame refine
+            S2 = sim_fn(g_qe, g_d)   # query refine vs frame gốc
+            score = 0.5 * (S1 + S2)
+
+            res.confidence_score = float(score)
             combined_results.append(res)
 
+        # ----- Sort kết quả -----
         sorted_results = sorted(combined_results, key=lambda r: r.confidence_score, reverse=True)
         return sorted_results[:top_k]
-    
+
     # ------------------------
     # Entry point
     # ------------------------

@@ -377,11 +377,19 @@ async def search_temporal_event(
     start_frame_display = None
     if start_frame:
         path, score = controller.convert_model_to_path(start_frame)
-        start_frame_display = SingleKeyframeDisplay(path=path, score=score)
+        start_frame_display = SingleKeyframeDisplay(
+            path=path,
+            score=score,
+            key=start_frame.key   # ✅ thêm key
+        )
 
     end_frame_display = None
     if end_frame:
         path, score = controller.convert_model_to_path(end_frame)
-        end_frame_display = SingleKeyframeDisplay(path=path, score=score)
+        end_frame_display = SingleKeyframeDisplay(
+            path=path,
+            score=score,
+            key=end_frame.key   # ✅ thêm key
+        )
 
     return TemporalSearchResponse(start_frame=start_frame_display, end_frame=end_frame_display)

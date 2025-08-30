@@ -51,17 +51,17 @@ class TemporalSearchService:
                 if tolerance >= threshold:
                     break
 
-        return frames[best_idx]
+        return best_idx
 
     async def search_temporal_event(
         self,
         start_query_embedding: list[float],
         end_query_embedding: list[float],
         pivot_frame: KeyframeServiceReponse,
-    ) -> (KeyframeServiceReponse, KeyframeServiceReponse):
+    ):
         # 1. Get all keyframes from the same video as the pivot frame
         video_num = pivot_frame.video_num
-        keyframes_in_video = await self.keyframe_mongo_repo.get_keyframe_by_video_num(video_num)
+        keyframes_in_video = await self.keyframe_mongo_repo.get_keyframes_by_pivot(pivot_frame=pivot_frame)
 
         if not keyframes_in_video:
             return None, None
@@ -87,7 +87,7 @@ class TemporalSearchService:
             return None, None # Pivot not found in the video, should not happen
 
         # 3. Perform temporal search
-        start_frame = await self._adaptive_temporal_search(
+        start_idx = await self._adaptive_temporal_search(
             query_embedding=start_query_embedding_np,
             frames=sorted_keyframes,
             frame_embeddings=frame_embeddings_np,
@@ -95,7 +95,7 @@ class TemporalSearchService:
             direction="backward",
         )
 
-        end_frame = await self._adaptive_temporal_search(
+        end_idx = await self._adaptive_temporal_search(
             query_embedding=end_query_embedding_np,
             frames=sorted_keyframes,
             frame_embeddings=frame_embeddings_np,
@@ -103,4 +103,14 @@ class TemporalSearchService:
             direction="forward",
         )
 
-        return start_frame, end_frame
+        # 4. Lấy ra frame object rồi wrap thành KeyframeServiceReponse
+        def to_service_response(frame) -> KeyframeServiceReponse:
+            return KeyframeServiceReponse(
+                key=frame.key,
+                video_num=frame.video_num,
+                group_num=frame.group_num,
+                keyframe_num=frame.keyframe_num,
+                confidence_score=getattr(frame, "confidence_score", 1.0)
+            )
+
+        return to_service_response(sorted_keyframes[start_idx]), to_service_response(sorted_keyframes[end_idx])
