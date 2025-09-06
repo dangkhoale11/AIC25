@@ -45,7 +45,7 @@ def get_mongo_settings():
 
 
 def get_batch(batch: int = Query(1, description="The batch number to use (1, 2, or 3)")) -> int:
-    if batch not in [1, 2]:
+    if batch not in [1, 2, 3]:
         raise HTTPException(status_code=400, detail="Invalid batch number. Must be 1, 2, or 3.")
     return batch
 
@@ -166,7 +166,6 @@ def get_query_controller(
     model_service: ModelService = Depends(get_model_service),
     keyframe_service: KeyframeQueryService = Depends(get_keyframe_service),
     temporal_search_service: TemporalSearchService = Depends(get_temporal_search_service),
-    milvus_settings: KeyFrameIndexMilvusSetting = Depends(get_milvus_settings),
     app_settings: AppSettings = Depends(get_app_settings),
     batch: int = Depends(get_batch)
 ) -> QueryController:
@@ -174,15 +173,19 @@ def get_query_controller(
     try:
         logger.info("Creating query controller...")
         
-        data_folder = Path(app_settings.DATA_FOLDER)
-        id2index_path = Path(app_settings.ID2INDEX_PATH)
-        print(id2index_path)
+        # Construct batch-specific paths
+        data_folder = Path(app_settings.DATA_FOLDER) / f"batch_{batch}"
+        id2index_path = data_folder / "id2index.json"
+
+        print(f"data_folder: {data_folder}")
+        print(f"id2index_path: {id2index_path}")
         if not data_folder.exists():
             logger.warning(f"Data folder does not exist: {data_folder}")
             data_folder.mkdir(parents=True, exist_ok=True)
             
         if not id2index_path.exists():
             logger.warning(f"ID2Index file does not exist: {id2index_path}")
+            # Ensure parent directory exists
             id2index_path.parent.mkdir(parents=True, exist_ok=True)
             with open(id2index_path, 'w') as f:
                 json.dump({}, f)
