@@ -33,14 +33,14 @@ class KeyFrameIndexMilvusSetting(BaseSettings):
     SEARCH_PARAMS: dict = {}
 
 
-class OcrIndexMilvusSetting(BaseSettings):
-    COLLECTION_NAME: str = "ocr_batch1"
-    HOST: str = 'localhost'
-    PORT: str = '19530'
-    METRIC_TYPE: str = 'COSINE'
-    INDEX_TYPE: str = 'FLAT'
-    BATCH_SIZE: int =10000
-    SEARCH_PARAMS: dict = {}
+# class OcrIndexMilvusSetting(BaseSettings):
+#     COLLECTION_NAME: str = "ocr_batch1"
+#     HOST: str = 'localhost'
+#     PORT: str = '19530'
+#     METRIC_TYPE: str = 'COSINE'
+#     INDEX_TYPE: str = 'FLAT'
+#     BATCH_SIZE: int =10000
+#     SEARCH_PARAMS: dict = {}
 
 
 class AppSettings(BaseSettings):

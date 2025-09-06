@@ -76,7 +76,7 @@ class QueryController:
         top_k: int,
         score_threshold: float,
         rerank_type: str,
-        ocr_query: str | None = None,
+        # ocr_query: str | None = None,
         p_qe: float = 3.0,
         p_dr: float = 3.0,
         m_neighbors: int = 5,
@@ -89,17 +89,17 @@ class QueryController:
         translated_query = self.translator.translate(query)
         text_embedding = self.model_service.embedding(translated_query).tolist()[0]
 
-        ocr_embedding = None
-        if rerank_type == "ocr" and ocr_query:
-            translated_ocr_query = self.translator.translate(ocr_query)
-            ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
+        # ocr_embedding = None
+        # if rerank_type == "ocr" and ocr_query:
+        #     translated_ocr_query = self.translator.translate(ocr_query)
+        #     ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
         result = await self.keyframe_service.search_with_rerank(
             text_embedding=text_embedding,
             top_k=top_k,
             score_threshold=score_threshold,
             method=rerank_type,
-            ocr_embedding=ocr_embedding,
+            # ocr_embedding=ocr_embedding,
             p_qe=p_qe,
             p_dr=p_dr,
             m_neighbors=m_neighbors,
@@ -214,39 +214,39 @@ class QueryController:
 
     
 
-    async def search_text_with_ocr_filter(
-        self,
-        query: str,
-        ocr_query: str,
-        top_k: int,
-        score_threshold: float,
-        ocr_weight: float,
-    ):
-        translated_query = self.translator.translate(query)
-        translated_ocr_query = self.translator.translate(ocr_query)
-        text_embedding = self.model_service.embedding(translated_query).tolist()[0]
-        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
+    # async def search_text_with_ocr_filter(
+    #     self,
+    #     query: str,
+    #     ocr_query: str,
+    #     top_k: int,
+    #     score_threshold: float,
+    #     ocr_weight: float,
+    # ):
+    #     translated_query = self.translator.translate(query)
+    #     translated_ocr_query = self.translator.translate(ocr_query)
+    #     text_embedding = self.model_service.embedding(translated_query).tolist()[0]
+    #     ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
-        result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
-            text_embedding, ocr_embedding, top_k, score_threshold, ocr_weight
-        )
-        return result
+    #     result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
+    #         text_embedding, ocr_embedding, top_k, score_threshold, ocr_weight
+    #     )
+    #     return result
 
 
-    async def rerank_with_ocr(
-        self,
-        results: list[KeyframeServiceReponse],
-        ocr_query: str,
-        top_k: int,
-        ocr_weight: float,
-    ):
-        translated_ocr_query = self.translator.translate(ocr_query)
-        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
+    # async def rerank_with_ocr(
+    #     self,
+    #     results: list[KeyframeServiceReponse],
+    #     ocr_query: str,
+    #     top_k: int,
+    #     ocr_weight: float,
+    # ):
+    #     translated_ocr_query = self.translator.translate(ocr_query)
+    #     ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
-        result = await self.keyframe_service.rerank_by_ocr(
-            results, ocr_embedding, top_k, ocr_weight
-        )
-        return result
+    #     result = await self.keyframe_service.rerank_by_ocr(
+    #         results, ocr_embedding, top_k, ocr_weight
+    #     )
+    #     return result
 
 
     async def search_temporal(

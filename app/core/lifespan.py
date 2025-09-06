@@ -15,7 +15,8 @@ ROOT_DIR = os.path.abspath(
 sys.path.insert(0, ROOT_DIR)
 
 
-from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting, OcrIndexMilvusSetting, AppSettings
+from core.settings import MongoDBSettings, KeyFrameIndexMilvusSetting, AppSettings
+# OcrIndexMilvusSetting,
 from models.keyframe import Keyframe
 from factory.factory import ServiceFactory
 from core.logger import SimpleLogger
@@ -35,7 +36,7 @@ async def lifespan(app: FastAPI):
     try:
         mongo_settings = MongoDBSettings()
         milvus_settings = KeyFrameIndexMilvusSetting()
-        ocr_milvus_settings = OcrIndexMilvusSetting()
+        # ocr_milvus_settings = OcrIndexMilvusSetting()
         appsetting = AppSettings()
         global mongo_client
         mongo_connection_string = (
@@ -56,7 +57,7 @@ async def lifespan(app: FastAPI):
         logger.info("Beanie initialized successfully")
         
         app.state.service_factories = {}
-        for batch in [1, 2, 3]:
+        for batch in [1, 2]:
             logger.info(f"Initializing service factory for batch {batch}...")
 
             milvus_search_params = {
@@ -64,10 +65,10 @@ async def lifespan(app: FastAPI):
                 "params": milvus_settings.SEARCH_PARAMS
             }
 
-            ocr_milvus_search_params = {
-                "metric_type": ocr_milvus_settings.METRIC_TYPE,
-                "params": ocr_milvus_settings.SEARCH_PARAMS
-            }
+            # ocr_milvus_search_params = {
+            #     "metric_type": ocr_milvus_settings.METRIC_TYPE,
+            #     "params": ocr_milvus_settings.SEARCH_PARAMS
+            # }
 
             service_factory = ServiceFactory(
                 batch=batch,
@@ -76,13 +77,13 @@ async def lifespan(app: FastAPI):
                 milvus_user="",
                 milvus_password="",
                 milvus_search_params=milvus_search_params,
-                ocr_milvus_host=ocr_milvus_settings.HOST,
-                ocr_milvus_port=ocr_milvus_settings.PORT,
-                ocr_milvus_user="",
-                ocr_milvus_password="",
-                ocr_milvus_search_params=ocr_milvus_search_params,
+                # ocr_milvus_host=ocr_milvus_settings.HOST,
+                # ocr_milvus_port=ocr_milvus_settings.PORT,
+                # ocr_milvus_user="",
+                # ocr_milvus_password="",
+                # ocr_milvus_search_params=ocr_milvus_search_params,
                 model_name=appsetting.MODEL_NAME,
-                model_ocr_name=appsetting.MODEL_OCR_NAME
+                # model_ocr_name=appsetting.MODEL_OCR_NAME
             )
             app.state.service_factories[batch] = service_factory
             logger.info(f"Service factory for batch {batch} initialized successfully")

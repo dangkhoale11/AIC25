@@ -10,7 +10,8 @@ ROOT_DIR = os.path.abspath(
 sys.path.insert(0, ROOT_DIR)
 
 
-from repository.milvus import KeyframeVectorRepository, OcrVectorRepository
+from repository.milvus import KeyframeVectorRepository
+# , OcrVectorRepository
 from repository.milvus import MilvusSearchRequest
 from repository.mongo import KeyframeRepository
 
@@ -26,13 +27,13 @@ class KeyframeQueryService:
             self, 
             keyframe_vector_repo: KeyframeVectorRepository,
             keyframe_mongo_repo: KeyframeRepository,
-            ocr_vector_repo: OcrVectorRepository,
+            # ocr_vector_repo: OcrVectorRepository,
             
         ):
 
         self.keyframe_vector_repo = keyframe_vector_repo
         self.keyframe_mongo_repo= keyframe_mongo_repo
-        self.ocr_vector_repo = ocr_vector_repo
+        # self.ocr_vector_repo = ocr_vector_repo
 
     
     
@@ -340,7 +341,7 @@ class KeyframeQueryService:
         text_embedding: list[float],
         top_k: int,
         method: str = "GEM",   # "ocr" | "gem" | "temporal"
-        ocr_embedding: list[float] = None,
+        # ocr_embedding: list[float] = None,
         score_threshold: float = 0.5,
         p_qe: float = 3.0,
         p_dr: float = 3.0,

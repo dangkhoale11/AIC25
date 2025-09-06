@@ -45,7 +45,7 @@ def get_mongo_settings():
 
 
 def get_batch(batch: int = Query(1, description="The batch number to use (1, 2, or 3)")) -> int:
-    if batch not in [1, 2, 3]:
+    if batch not in [1, 2]:
         raise HTTPException(status_code=400, detail="Invalid batch number. Must be 1, 2, or 3.")
     return batch
 
