@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from fastapi import Depends, Request, HTTPException
 from functools import lru_cache
@@ -18,7 +17,7 @@ sys.path.insert(0, ROOT_DIR)
 from controller.query_controller import QueryController
 from service import ModelService, KeyframeQueryService
 from service.temporal_search_service import TemporalSearchService
-from core.settings import KeyFrameIndexMilvusSetting, MongoDBSettings, AppSettings
+from core.settings import KeyFrameIndexMilvusSetting, MongoDBSettings, AppSettings, MilvusSettings
 from factory.factory import ServiceFactory
 from core.logger import SimpleLogger
 
@@ -35,7 +34,7 @@ def get_app_settings():
 @lru_cache()
 def get_milvus_settings():
     """Get Milvus settings (cached)"""
-    return KeyFrameIndexMilvusSetting()
+    return MilvusSettings()
 
 
 @lru_cache()
@@ -76,44 +75,6 @@ def get_model_service(service_factory: ServiceFactory = Depends(get_service_fact
             status_code=503,
             detail=f"Model service initialization failed: {str(e)}"
         )
-    
-
-def get_keyframe_service(service_factory: ServiceFactory = Depends(get_service_factory)) -> KeyframeQueryService:
-    """Get keyframe query service from ServiceFactory"""
-    try:
-        keyframe_service = service_factory.get_keyframe_query_service()
-        if keyframe_service is None:
-            logger.error("Keyframe service not available from factory")
-            raise HTTPException(
-                status_code=503,
-                detail="Keyframe service not available"
-            )
-        return keyframe_service
-    except Exception as e:
-        logger.error(f"Failed to get keyframe service: {str(e)}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Keyframe service initialization failed: {str(e)}"
-        )
-
-
-def get_temporal_search_service(service_factory: ServiceFactory = Depends(get_service_factory)) -> TemporalSearchService:
-    """Get temporal search service from ServiceFactory"""
-    try:
-        temporal_search_service = service_factory.get_temporal_search_service()
-        if temporal_search_service is None:
-            logger.error("Temporal search service not available from factory")
-            raise HTTPException(
-                status_code=503,
-                detail="Temporal search service not available"
-            )
-        return temporal_search_service
-    except Exception as e:
-        logger.error(f"Failed to get temporal search service: {str(e)}")
-        raise HTTPException(
-            status_code=503,
-            detail=f"Temporal search service initialization failed: {str(e)}"
-        )
 
 
 def get_mongo_client(request: Request):
@@ -139,10 +100,10 @@ async def check_mongodb_health(request: Request) -> bool:
 
 
 
-def get_milvus_repository(service_factory: ServiceFactory = Depends(get_service_factory)):
+def get_milvus_repository(service_factory: ServiceFactory = Depends(get_service_factory), search_mode: str = "batch-1"):
     """Get Milvus repository from ServiceFactory"""
     try:
-        repository = service_factory.get_milvus_keyframe_repo()
+        repository = service_factory.get_milvus_keyframe_repo(search_mode)
         if repository is None:
             raise HTTPException(
                 status_code=503,
@@ -159,9 +120,7 @@ def get_milvus_repository(service_factory: ServiceFactory = Depends(get_service_
 
 def get_query_controller(
     model_service: ModelService = Depends(get_model_service),
-    keyframe_service: KeyframeQueryService = Depends(get_keyframe_service),
-    temporal_search_service: TemporalSearchService = Depends(get_temporal_search_service),
-    milvus_settings: KeyFrameIndexMilvusSetting = Depends(get_milvus_settings),
+    service_factory: ServiceFactory = Depends(get_service_factory),
     app_settings: AppSettings = Depends(get_app_settings)
 ) -> QueryController:
     """Get query controller instance"""
@@ -185,8 +144,7 @@ def get_query_controller(
             data_folder=data_folder,
             id2index_path=id2index_path,
             model_service=model_service,
-            keyframe_service=keyframe_service,
-            temporal_search_service=temporal_search_service
+            service_factory=service_factory
         )
         
         logger.info("Query controller created successfully")

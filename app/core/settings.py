@@ -33,6 +33,15 @@ class KeyFrameIndexMilvusSetting(BaseSettings):
     SEARCH_PARAMS: dict = {}
 
 
+class KeyFrameIndexMilvusSettingBatch2(KeyFrameIndexMilvusSetting):
+    COLLECTION_NAME: str = "keyframe_batch2"
+
+
+class MilvusSettings(BaseSettings):
+    batch_1: KeyFrameIndexMilvusSetting = KeyFrameIndexMilvusSetting()
+    batch_2: KeyFrameIndexMilvusSettingBatch2 = KeyFrameIndexMilvusSettingBatch2()
+
+
 class OcrIndexMilvusSetting(BaseSettings):
     COLLECTION_NAME: str = "ocr"
     HOST: str = 'localhost'

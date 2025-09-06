@@ -11,8 +11,8 @@ ROOT_DIR = os.path.abspath(
 
 sys.path.insert(0, ROOT_DIR)
 
-from service import ModelService, KeyframeQueryService
-from service.temporal_search_service import TemporalSearchService
+from service import ModelService
+from factory.factory import ServiceFactory
 from schema.response import KeyframeServiceReponse
 from core.translation import TextTranslator
 
@@ -24,15 +24,14 @@ class QueryController:
         data_folder: Path,
         id2index_path: Path,
         model_service: ModelService,
-        keyframe_service: KeyframeQueryService,
-        temporal_search_service: TemporalSearchService
+        service_factory: ServiceFactory
     ):
         self.data_folder = data_folder
         self.id2index = json.load(open(id2index_path, 'r'))
         self.model_service = model_service
-        self.keyframe_service = keyframe_service
-        self.temporal_search_service = temporal_search_service
+        self.service_factory = service_factory
         self.translator = TextTranslator()
+        self.cache = {}
 
     
     def convert_model_to_path(
@@ -46,17 +45,22 @@ class QueryController:
             f"{model.keyframe_num:06d}.webp"
         ), model.confidence_score
     
+    def clear_cache(self):
+        self.cache = {}
         
     async def search_text(
         self, 
         query: str,
         top_k: int,
-        score_threshold: float
+        score_threshold: float,
+        search_mode: str = "batch-1"
     ):
         translated_query = self.translator.translate(query)
         embedding = self.model_service.embedding(translated_query).tolist()[0]
 
-        result = await self.keyframe_service.search_by_text(embedding, top_k, score_threshold)
+        keyframe_service = self.service_factory.get_keyframe_query_service(search_mode)
+        result = await keyframe_service.search_by_text(embedding, top_k, score_threshold)
+        self.cache['last_search'] = result
         return result
 
 
@@ -66,6 +70,7 @@ class QueryController:
         top_k: int,
         score_threshold: float,
         rerank_type: str,
+        search_mode: str = "batch-1",
         ocr_query: str | None = None,
         p_qe: float = 3.0,
         p_dr: float = 3.0,
@@ -80,7 +85,15 @@ class QueryController:
             translated_ocr_query = self.translator.translate(ocr_query)
             ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
-        result = await self.keyframe_service.search_with_rerank(
+        keyframe_service = self.service_factory.get_keyframe_query_service(search_mode)
+
+        # Use cached results if available
+        initial_results = self.cache.get('last_search')
+        if not initial_results:
+            initial_results = await keyframe_service.search_by_text(text_embedding, top_k, score_threshold)
+            self.cache['last_search'] = initial_results
+
+        result = await keyframe_service.search_with_rerank(
             text_embedding=text_embedding,
             top_k=top_k,
             score_threshold=score_threshold,
@@ -91,6 +104,7 @@ class QueryController:
             m_neighbors=m_neighbors,
             sim_metric=sim_metric,
         )
+        self.cache['last_search'] = result # Override cache with reranked results
         return result
 
 
@@ -99,7 +113,8 @@ class QueryController:
         query: str,
         top_k: int,
         score_threshold: float,
-        list_group_exlude: list[int]
+        list_group_exlude: list[int],
+        search_mode: str = "batch-1"
     ):
         exclude_ids = [
             int(k) for k, v in self.id2index.items()
@@ -110,7 +125,9 @@ class QueryController:
         translated_query = self.translator.translate(query)
         embedding = self.model_service.embedding(translated_query).tolist()[0]
 
-        result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
+        keyframe_service = self.service_factory.get_keyframe_query_service(search_mode)
+        result = await keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
+        self.cache['last_search'] = result
         return result
 
 
@@ -120,7 +137,8 @@ class QueryController:
         top_k: int,
         score_threshold: float,
         list_of_include_groups: list[int],
-        list_of_include_videos: list[int]
+        list_of_include_videos: list[int],
+        search_mode: str = "batch-1"
     ):
         """
         Search keyframes with optional filtering by groups and/or videos.
@@ -164,7 +182,8 @@ class QueryController:
         embedding = self.model_service.embedding(translated_query).tolist()[0]
 
         # --- Bước 3: Search vector DB ---
-        results = await self.keyframe_service.search_by_text_exclude_ids(
+        keyframe_service = self.service_factory.get_keyframe_query_service(search_mode)
+        results = await keyframe_service.search_by_text_exclude_ids(
             embedding,
             top_k,
             score_threshold,
@@ -177,7 +196,7 @@ class QueryController:
             if (not list_of_include_groups or r.group_num in list_of_include_groups)
             and (not list_of_include_videos or r.video_num in list_of_include_videos)
         ]
-
+        self.cache['last_search'] = results
         return results
         
 
@@ -190,15 +209,18 @@ class QueryController:
         top_k: int,
         score_threshold: float,
         ocr_weight: float,
+        search_mode: str = "batch-1"
     ):
         translated_query = self.translator.translate(query)
         translated_ocr_query = self.translator.translate(ocr_query)
         text_embedding = self.model_service.embedding(translated_query).tolist()[0]
         ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
-        result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
+        keyframe_service = self.service_factory.get_keyframe_query_service(search_mode)
+        result = await keyframe_service.search_by_text_and_filter_with_ocr(
             text_embedding, ocr_embedding, top_k, score_threshold, ocr_weight
         )
+        self.cache['last_search'] = result
         return result
 
 
@@ -208,13 +230,16 @@ class QueryController:
         ocr_query: str,
         top_k: int,
         ocr_weight: float,
+        search_mode: str = "batch-1"
     ):
         translated_ocr_query = self.translator.translate(ocr_query)
         ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
-        result = await self.keyframe_service.rerank_by_ocr(
+        keyframe_service = self.service_factory.get_keyframe_query_service(search_mode)
+        result = await keyframe_service.rerank_by_ocr(
             results, ocr_embedding, top_k, ocr_weight
         )
+        self.cache['last_search'] = result
         return result
 
 
@@ -224,6 +249,7 @@ class QueryController:
         end_query: str,
         search_results: list[KeyframeServiceReponse],
         search_range: tuple[int, int],
+        search_mode: str = "batch-1"
     ):
         """
         Orchestrates a temporal search for multiple pivot frames.
@@ -236,9 +262,10 @@ class QueryController:
         start_idx, end_idx = search_range
         pivots = search_results[start_idx:end_idx]
 
+        temporal_search_service = self.service_factory.get_temporal_search_service(search_mode)
         temporal_events = []
         for pivot_frame in pivots:
-            start_frame, end_frame = await self.temporal_search_service.search_temporal_event(
+            start_frame, end_frame = await temporal_search_service.search_temporal_event(
                 start_query_embedding=start_embedding,
                 end_query_embedding=end_embedding,
                 pivot_frame=pivot_frame,

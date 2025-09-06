@@ -19,64 +19,24 @@ from models.keyframe import Keyframe
 import open_clip
 from pymilvus import connections, Collection as MilvusCollection
 
+from core.settings import MilvusSettings, OcrIndexMilvusSetting, AppSettings, KeyFrameIndexMilvusSetting
+
 
 class ServiceFactory:
     def __init__(
         self,
-        milvus_collection_name: str,
-        milvus_host: str,
-        milvus_port: str ,
-        milvus_user: str ,
-        milvus_password: str ,
-        milvus_search_params: dict,
-        ocr_milvus_collection_name: str,
-        ocr_milvus_host: str,
-        ocr_milvus_port: str,
-        ocr_milvus_user: str,
-        ocr_milvus_password: str,
-        ocr_milvus_search_params: dict,
-        model_name: str ,
-        model_ocr_name: str,
-        milvus_db_name: str = "default",
-        milvus_alias: str = "default",
-        ocr_milvus_alias: str = "ocr",
+        milvus_settings: MilvusSettings,
+        ocr_milvus_setting: OcrIndexMilvusSetting,
+        app_settings: AppSettings,
         mongo_collection=Keyframe,
     ):
         self._mongo_keyframe_repo = KeyframeRepository(collection=mongo_collection)
-        self._milvus_keyframe_repo = self._init_milvus_repo(
-            search_params=milvus_search_params,
-            collection_name=milvus_collection_name,
-            host=milvus_host,
-            port=milvus_port,
-            user=milvus_user,
-            password=milvus_password,
-            db_name=milvus_db_name,
-            alias=milvus_alias
-        )
-
-        self._milvus_ocr_repo = self._init_milvus_ocr_repo(
-            search_params=ocr_milvus_search_params,
-            collection_name=ocr_milvus_collection_name,
-            host=ocr_milvus_host,
-            port=ocr_milvus_port,
-            user=ocr_milvus_user,
-            password=ocr_milvus_password,
-            db_name=milvus_db_name,
-            alias=ocr_milvus_alias
-        )
-
-        self._model_service = self._init_model_service(model_name, model_ocr_name)
-
-        self._keyframe_query_service = KeyframeQueryService(
-            keyframe_mongo_repo=self._mongo_keyframe_repo,
-            keyframe_vector_repo=self._milvus_keyframe_repo,
-            ocr_vector_repo=self._milvus_ocr_repo
-        )
-
-        self._temporal_search_service = TemporalSearchService(
-            keyframe_vector_repo=self._milvus_keyframe_repo,
-            keyframe_mongo_repo=self._mongo_keyframe_repo,
-        )
+        self._milvus_settings = milvus_settings
+        self._ocr_milvus_setting = ocr_milvus_setting
+        self._app_settings = app_settings
+        self._model_service = self._init_model_service(app_settings.MODEL_NAME, app_settings.MODEL_OCR_NAME)
+        self._repo_cache = {}
+        self._ocr_repo_cache = {}
 
     def _init_milvus_repo(
         self,
@@ -107,6 +67,34 @@ class ServiceFactory:
 
         return KeyframeVectorRepository(collection=collection, search_params=search_params)
 
+    def _get_milvus_setting(self, search_mode: str) -> KeyFrameIndexMilvusSetting:
+        if search_mode == "batch-1":
+            return self._milvus_settings.batch_1
+        elif search_mode == "batch-2":
+            return self._milvus_settings.batch_2
+        else:
+            raise ValueError(f"Invalid search_mode: {search_mode}")
+
+    def get_milvus_keyframe_repo(self, search_mode: str = "batch-1") -> KeyframeVectorRepository:
+        if search_mode in self._repo_cache:
+            return self._repo_cache[search_mode]
+
+        setting = self._get_milvus_setting(search_mode)
+        alias = f"default_{search_mode}"
+
+        repo = self._init_milvus_repo(
+            search_params=setting.SEARCH_PARAMS,
+            collection_name=setting.COLLECTION_NAME,
+            host=setting.HOST,
+            port=setting.PORT,
+            user="",
+            password="",
+            db_name="default",
+            alias=alias
+        )
+        self._repo_cache[search_mode] = repo
+        return repo
+
     def _init_milvus_ocr_repo(
         self,
         search_params: dict,
@@ -136,26 +124,49 @@ class ServiceFactory:
 
         return OcrVectorRepository(collection=collection, search_params=search_params)
 
+    def get_milvus_ocr_repo(self) -> OcrVectorRepository:
+        if "ocr" in self._ocr_repo_cache:
+            return self._ocr_repo_cache["ocr"]
+
+        setting = self._ocr_milvus_setting
+        repo = self._init_milvus_ocr_repo(
+            search_params=setting.SEARCH_PARAMS,
+            collection_name=setting.COLLECTION_NAME,
+            host=setting.HOST,
+            port=setting.PORT,
+            user="",
+            password="",
+            db_name="default",
+            alias="ocr"
+        )
+        self._ocr_repo_cache["ocr"] = repo
+        return repo
+
     def _init_model_service(self, model_name: str, model_ocr_name: str):
         model, _, preprocess = open_clip.create_model_and_transforms(model_name)
         tokenizer = open_clip.get_tokenizer(model_name)
         model_ocr = SentenceTransformer(model_ocr_name)
         return ModelService(model=model,model_ocr=model_ocr, preprocess=preprocess, tokenizer=tokenizer)
 
-    def get_mongo_keyframe_repo(self):
+    def get_mongo_keyframe_repo(self) -> KeyframeRepository:
         return self._mongo_keyframe_repo
 
-    def get_milvus_keyframe_repo(self):
-        return self._milvus_keyframe_repo
-
-    def get_milvus_ocr_repo(self):
-        return self._milvus_ocr_repo
-
-    def get_model_service(self):
+    def get_model_service(self) -> ModelService:
         return self._model_service
 
-    def get_keyframe_query_service(self):
-        return self._keyframe_query_service
+    def get_keyframe_query_service(self, search_mode: str = "batch-1") -> KeyframeQueryService:
+        keyframe_vector_repo = self.get_milvus_keyframe_repo(search_mode)
+        ocr_vector_repo = self.get_milvus_ocr_repo()
 
-    def get_temporal_search_service(self):
-        return self._temporal_search_service
+        return KeyframeQueryService(
+            keyframe_mongo_repo=self._mongo_keyframe_repo,
+            keyframe_vector_repo=keyframe_vector_repo,
+            ocr_vector_repo=ocr_vector_repo
+        )
+
+    def get_temporal_search_service(self, search_mode: str = "batch-1") -> TemporalSearchService:
+        keyframe_vector_repo = self.get_milvus_keyframe_repo(search_mode)
+        return TemporalSearchService(
+            keyframe_vector_repo=keyframe_vector_repo,
+            keyframe_mongo_repo=self._mongo_keyframe_repo,
+        )

@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from typing import List, Optional, Union
@@ -41,13 +40,16 @@ async def _handle_search_response(
     """
     Handles the response logic for a search request, including optional temporal search.
     """
+    results_for_temporal_search = controller.cache.get('last_search', initial_results)
+
     if request.use_temporal and request.temporal_start_query and request.temporal_end_query:
         logger.info("Performing temporal search on initial results.")
         temporal_events_data = await controller.search_temporal(
             start_query=request.temporal_start_query,
             end_query=request.temporal_end_query,
-            search_results=initial_results,
+            search_results=results_for_temporal_search,
             search_range=request.temporal_search_range,
+            search_mode=request.search_mode,
         )
 
         temporal_events = []
@@ -95,13 +97,14 @@ async def search_with_rerank(
     """
     Search for keyframes with reranking.
     """
-    logger.info(f"Rerank search request: query='{request.query}', rerank_type='{request.rerank_type}'")
+    logger.info(f"Rerank search request: query='{request.query}', rerank_type='{request.rerank_type}', search_mode='{request.search_mode}'")
 
     results = await controller.search_with_rerank(
         query=request.query,
         top_k=request.top_k,
         score_threshold=request.score_threshold,
         rerank_type=request.rerank_type,
+        search_mode=request.search_mode,
         ocr_query=request.ocr_query,
         p_qe=request.p_qe,
         p_dr=request.p_dr,
@@ -126,12 +129,13 @@ async def search_keyframes(
     """
     Search for keyframes using text query with semantic similarity.
     """
-    logger.info(f"Text search request: query='{request.query}', top_k={request.top_k}, threshold={request.score_threshold}")
+    logger.info(f"Text search request: query='{request.query}', top_k={request.top_k}, threshold={request.score_threshold}, search_mode='{request.search_mode}'")
     
     results = await controller.search_text(
         query=request.query,
         top_k=request.top_k,
-        score_threshold=request.score_threshold
+        score_threshold=request.score_threshold,
+        search_mode=request.search_mode
     )
     
     return await _handle_search_response(request, results, controller)
@@ -158,6 +162,7 @@ async def rerank_keyframes_with_ocr(
         ocr_query=request.ocr_query,
         top_k=request.top_k,
         ocr_weight=request.ocr_weight,
+        search_mode=request.search_mode
     )
 
     logger.info(f"Found {len(results)} results with OCR reranking")
@@ -187,7 +192,7 @@ async def search_keyframes_with_ocr_filter(
     """
     Search for keyframes with OCR filtering.
     """
-    logger.info(f"Text search with OCR filter: query='{request.query}', ocr_query='{request.ocr_query}'")
+    logger.info(f"Text search with OCR filter: query='{request.query}', ocr_query='{request.ocr_query}', search_mode='{request.search_mode}'")
 
     results = await controller.search_text_with_ocr_filter(
         query=request.query,
@@ -195,6 +200,7 @@ async def search_keyframes_with_ocr_filter(
         top_k=request.top_k,
         score_threshold=request.score_threshold,
         ocr_weight=request.ocr_weight,
+        search_mode=request.search_mode
     )
 
     logger.info(f"Found {len(results)} results with OCR filtering")
@@ -219,13 +225,14 @@ async def search_keyframes_exclude_groups(
     """
     Search for keyframes with group exclusion filtering.
     """
-    logger.info(f"Text search with group exclusion: query='{request.query}', exclude_groups={request.exclude_groups}")
+    logger.info(f"Text search with group exclusion: query='{request.query}', exclude_groups={request.exclude_groups}, search_mode='{request.search_mode}'")
     
     results: list[KeyframeServiceReponse] = await controller.search_text_with_exlude_group(
         query=request.query,
         top_k=request.top_k,
         score_threshold=request.score_threshold,
-        list_group_exlude=request.exclude_groups
+        list_group_exlude=request.exclude_groups,
+        search_mode=request.search_mode
     )
     
     return await _handle_search_response(request, results, controller)
@@ -245,14 +252,23 @@ async def search_keyframes_selected_groups_videos(
     """
     Search for keyframes within selected groups and videos.
     """
-    logger.info(f"Text search with selection: query='{request.query}', include_groups={request.include_groups}, include_videos={request.include_videos}")
+    logger.info(f"Text search with selection: query='{request.query}', include_groups={request.include_groups}, include_videos={request.include_videos}, search_mode='{request.search_mode}'")
     
     results = await controller.search_with_selected_video_group(
         query=request.query,
         top_k=request.top_k,
         score_threshold=request.score_threshold,
         list_of_include_groups=request.include_groups,
-        list_of_include_videos=request.include_videos
+        list_of_include_videos=request.include_videos,
+        search_mode=request.search_mode
     )
     
     return await _handle_search_response(request, results, controller)
+
+@router.post("/cache/clear-cache", summary="Clear the search result cache")
+async def clear_cache(controller: QueryController = Depends(get_query_controller)):
+    """
+    Clear the search result cache.
+    """
+    controller.clear_cache()
+    return {"message": "Cache cleared"}
