@@ -16,13 +16,6 @@ class MongoBaseRepository(Generic[BeanieDocument]):
     def __init__(self, collection: Type[BeanieDocument]):
         self.collection = collection
 
-    async def find(self, *args, **kwargs) -> list[BeanieDocument]:
-        """
-        Find documents in the collection.
-        """
-        return await self.collection.find(*args, **kwargs).to_list(length=None)
-    
-
     async def find_pipeline(self, pipeline: list[dict[str, Any]]) -> list[BeanieDocument]:
         """
         Find documents using an aggregation pipeline.

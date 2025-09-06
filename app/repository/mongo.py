@@ -25,7 +25,7 @@ class KeyframeRepository(MongoBaseRepository[BeanieDocument]):
     async def get_keyframe_by_list_of_keys(
         self, keys: list[int]
     ):
-        result = await self.find({"key": {"$in": keys}})
+        result = await self.collection.find({"key": {"$in": keys}}).to_list(length=None)
         return [
             KeyframeInterface(
                 key=keyframe.key,
@@ -44,12 +44,12 @@ class KeyframeRepository(MongoBaseRepository[BeanieDocument]):
         group_num = pivot_frame.group_num
 
         # Truy vấn tất cả keyframes cùng video_num và group_num (AND)
-        result = await self.find({
+        result = await self.collection.find({
             "$and": [
                 {"video_num": video_num},
                 {"group_num": group_num}
             ]
-        })
+        }).to_list(length=None)
 
         return [
             KeyframeInterface(
@@ -65,7 +65,7 @@ class KeyframeRepository(MongoBaseRepository[BeanieDocument]):
         self, 
         keyframe_num: int,
     ):
-        result = await self.find({"keyframe_num": keyframe_num})
+        result = await self.collection.find({"keyframe_num": keyframe_num}).to_list(length=None)
         return [
             KeyframeInterface(
                 key=keyframe.key,
