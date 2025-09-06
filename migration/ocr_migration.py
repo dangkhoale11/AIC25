@@ -154,11 +154,12 @@ class MilvusOcrInjector:
 
 def inject_ocr_data_simple(
     embedding_file_path: str,
-    setting: OcrIndexMilvusSetting
+    setting: OcrIndexMilvusSetting,
+    collection_name: str
 ):
     injector = MilvusOcrInjector(
         setting=setting,
-        collection_name=setting.COLLECTION_NAME,
+        collection_name=collection_name,
         host=setting.HOST,
         port=setting.PORT,
         alias="ocr"
@@ -179,10 +180,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--file_path", type=str, help="Path to data."
     )
+    parser.add_argument(
+        "--batch", type=int, default=1, help="Batch number to migrate."
+    )
     args = parser.parse_args()
 
     setting =  OcrIndexMilvusSetting()
+    collection_name = f"ocr_batch{args.batch}"
     inject_ocr_data_simple(
         embedding_file_path=args.file_path,
-        setting=setting
+        setting=setting,
+        collection_name=collection_name
     )

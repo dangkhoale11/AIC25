@@ -17,6 +17,9 @@ from schema.response import KeyframeServiceReponse
 from core.translation import TextTranslator
 
 
+SEARCH_CACHE = {}
+
+
 class QueryController:
     
     def __init__(
@@ -25,7 +28,8 @@ class QueryController:
         id2index_path: Path,
         model_service: ModelService,
         keyframe_service: KeyframeQueryService,
-        temporal_search_service: TemporalSearchService
+        temporal_search_service: TemporalSearchService,
+        batch: int
     ):
         self.data_folder = data_folder
         self.id2index = json.load(open(id2index_path, 'r'))
@@ -33,6 +37,7 @@ class QueryController:
         self.keyframe_service = keyframe_service
         self.temporal_search_service = temporal_search_service
         self.translator = TextTranslator()
+        self.batch = batch
 
     
     def convert_model_to_path(
@@ -53,10 +58,15 @@ class QueryController:
         top_k: int,
         score_threshold: float
     ):
+        cache_key = f"search_text_{self.batch}_{query}_{top_k}_{score_threshold}"
+        if cache_key in SEARCH_CACHE:
+            return SEARCH_CACHE[cache_key]
+
         translated_query = self.translator.translate(query)
         embedding = self.model_service.embedding(translated_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text(embedding, top_k, score_threshold)
+        SEARCH_CACHE[cache_key] = result
         return result
 
 
@@ -72,6 +82,10 @@ class QueryController:
         m_neighbors: int = 5,
         sim_metric: str = "cosine",
     ):
+        cache_key = f"search_with_rerank_{self.batch}_{query}_{top_k}_{score_threshold}_{rerank_type}_{ocr_query}_{p_qe}_{p_dr}_{m_neighbors}_{sim_metric}"
+        if cache_key in SEARCH_CACHE:
+            return SEARCH_CACHE[cache_key]
+
         translated_query = self.translator.translate(query)
         text_embedding = self.model_service.embedding(translated_query).tolist()[0]
 
@@ -91,6 +105,7 @@ class QueryController:
             m_neighbors=m_neighbors,
             sim_metric=sim_metric,
         )
+        SEARCH_CACHE[cache_key] = result
         return result
 
 
@@ -101,6 +116,10 @@ class QueryController:
         score_threshold: float,
         list_group_exlude: list[int]
     ):
+        cache_key = f"search_text_with_exlude_group_{self.batch}_{query}_{top_k}_{score_threshold}_{list_group_exlude}"
+        if cache_key in SEARCH_CACHE:
+            return SEARCH_CACHE[cache_key]
+
         exclude_ids = [
             int(k) for k, v in self.id2index.items()
             if int(v.split('/')[0]) in list_group_exlude
@@ -111,6 +130,14 @@ class QueryController:
         embedding = self.model_service.embedding(translated_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
+
+        # Safety filter
+        result = [
+            r for r in result
+            if r.group_num not in list_group_exlude
+        ]
+
+        SEARCH_CACHE[cache_key] = result
         return result
 
 
@@ -125,6 +152,9 @@ class QueryController:
         """
         Search keyframes with optional filtering by groups and/or videos.
         """
+        cache_key = f"search_with_selected_video_group_{self.batch}_{query}_{top_k}_{score_threshold}_{list_of_include_groups}_{list_of_include_videos}"
+        if cache_key in SEARCH_CACHE:
+            return SEARCH_CACHE[cache_key]
 
         # --- Bước 1: Chuẩn bị exclude_ids (giữ nguyên string key) ---
         exclude_ids: list[str] = []
@@ -178,6 +208,7 @@ class QueryController:
             and (not list_of_include_videos or r.video_num in list_of_include_videos)
         ]
 
+        SEARCH_CACHE[cache_key] = results
         return results
         
 
@@ -247,3 +278,37 @@ class QueryController:
                 temporal_events.append({"start_frame": start_frame, "end_frame": end_frame})
 
         return temporal_events
+
+
+    async def search_step(
+        self,
+        session_id: str,
+        query: str,
+        top_k: int,
+        score_threshold: float,
+        mode: str, # "new", "group", "exclude"
+    ):
+        # Perform search to get a list of KeyframeServiceResponse objects
+        search_results = await self.search_text(query, top_k, score_threshold)
+
+        # Extract just the IDs for caching and manipulation
+        result_ids = {result.key for result in search_results}
+
+        if mode == "new":
+            SEARCH_CACHE[session_id] = result_ids
+        elif mode == "group":
+            if session_id in SEARCH_CACHE:
+                SEARCH_CACHE[session_id].update(result_ids)
+            else:
+                SEARCH_CACHE[session_id] = result_ids
+        elif mode == "exclude":
+            if session_id in SEARCH_CACHE:
+                SEARCH_CACHE[session_id].difference_update(result_ids)
+        else: # Should not happen with proper validation in the router
+            return {"error": "Invalid search mode"}
+
+        # After updating the cache, retrieve the full objects for the current IDs
+        final_ids = list(SEARCH_CACHE.get(session_id, []))
+        final_results = await self.keyframe_service._retrieve_keyframes(final_ids)
+
+        return final_results

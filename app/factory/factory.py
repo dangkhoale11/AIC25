@@ -15,7 +15,7 @@ from repository.mongo import KeyframeRepository
 from repository.milvus import KeyframeVectorRepository, OcrVectorRepository
 from service import KeyframeQueryService, ModelService
 from service.temporal_search_service import TemporalSearchService
-from models.keyframe import Keyframe
+from models.factories import keyframe_model_factory
 import open_clip
 from pymilvus import connections, Collection as MilvusCollection
 
@@ -23,13 +23,12 @@ from pymilvus import connections, Collection as MilvusCollection
 class ServiceFactory:
     def __init__(
         self,
-        milvus_collection_name: str,
+        batch: int,
         milvus_host: str,
         milvus_port: str ,
         milvus_user: str ,
         milvus_password: str ,
         milvus_search_params: dict,
-        ocr_milvus_collection_name: str,
         ocr_milvus_host: str,
         ocr_milvus_port: str,
         ocr_milvus_user: str,
@@ -40,9 +39,14 @@ class ServiceFactory:
         milvus_db_name: str = "default",
         milvus_alias: str = "default",
         ocr_milvus_alias: str = "ocr",
-        mongo_collection=Keyframe,
     ):
-        self._mongo_keyframe_repo = KeyframeRepository(collection=mongo_collection)
+        milvus_collection_name = f"keyframe_batch{batch}"
+        ocr_milvus_collection_name = f"ocr_batch{batch}"
+        mongo_collection_name = f"keyframe_batch{batch}"
+
+        mongo_keyframe_model = keyframe_model_factory(mongo_collection_name)
+
+        self._mongo_keyframe_repo = KeyframeRepository(collection=mongo_keyframe_model)
         self._milvus_keyframe_repo = self._init_milvus_repo(
             search_params=milvus_search_params,
             collection_name=milvus_collection_name,

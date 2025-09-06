@@ -10,6 +10,7 @@ from schema.request import (
     TextSearchWithOcrRequest,
     OcrRerankRequest,
     RerankSearchRequest,
+    SearchStepRequest,
 )
 from schema.response import (
     KeyframeServiceReponse,
@@ -135,6 +136,41 @@ async def search_keyframes(
     )
     
     return await _handle_search_response(request, results, controller)
+
+
+@router.post(
+    "/search/step",
+    response_model=KeyframeDisplay,
+    summary="Perform one step in a multi-step search",
+    description="Performs a search on a batch and combines it with previous results in the session based on the mode ('new', 'group', 'exclude').",
+    response_description="The current combined list of keyframes for the session."
+)
+async def search_step(
+    request: SearchStepRequest,
+    controller: QueryController = Depends(get_query_controller)
+):
+    """
+    Perform a single search step in a multi-step search session.
+    """
+    logger.info(f"Search step request for session '{request.session_id}': mode='{request.mode}', query='{request.query}'")
+
+    if request.mode not in ["new", "group", "exclude"]:
+        raise HTTPException(status_code=400, detail="Invalid mode. Must be 'new', 'group', or 'exclude'.")
+
+    results = await controller.search_step(
+        session_id=request.session_id,
+        query=request.query,
+        top_k=request.top_k,
+        score_threshold=request.score_threshold,
+        mode=request.mode
+    )
+
+    display_results = []
+    for r in results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
+
+    return KeyframeDisplay(results=display_results, raw_results=results)
 
 
 @router.post(

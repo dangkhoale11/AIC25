@@ -67,3 +67,9 @@ class RerankSearchRequest(BaseSearchRequest, TemporalSearchMixin):
     p_dr: float = Field(default=3.0, description="Power for document refinement in GEM reranking")
     m_neighbors: int = Field(default=5, description="Number of neighbors for document refinement in GEM reranking")
     sim_metric: str = Field(default="cosine", description="Similarity metric for GEM reranking")
+
+
+class SearchStepRequest(BaseSearchRequest):
+    """Request for a single step in a multi-step search"""
+    session_id: str = Field(..., description="Unique ID for the search session")
+    mode: str = Field(..., description="Search mode: 'new', 'group', or 'exclude'")
