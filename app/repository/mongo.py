@@ -12,15 +12,16 @@ ROOT_DIR = os.path.abspath(
 
 sys.path.insert(0, ROOT_DIR)
 
-from typing import Any
-from models.keyframe import Keyframe
+from typing import Any, TypeVar
+from beanie import Document
 from common.repository import MongoBaseRepository
 from schema.interface import KeyframeInterface
 
 
+BeanieDocument = TypeVar('BeanieDocument', bound=Document)
 
 
-class KeyframeRepository(MongoBaseRepository[Keyframe]):
+class KeyframeRepository(MongoBaseRepository[BeanieDocument]):
     async def get_keyframe_by_list_of_keys(
         self, keys: list[int]
     ):

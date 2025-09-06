@@ -47,7 +47,10 @@ class ServiceFactory:
 
         mongo_keyframe_model = keyframe_model_factory(mongo_collection_name)
 
-        self._mongo_keyframe_repo = KeyframeRepository(collection=mongo_keyframe_model)
+        SpecificKeyframeRepository = KeyframeRepository[mongo_keyframe_model]
+        self._mongo_keyframe_repo = SpecificKeyframeRepository(
+            collection=mongo_keyframe_model
+        )
         self._milvus_keyframe_repo = self._init_milvus_repo(
             search_params=milvus_search_params,
             collection_name=milvus_collection_name,
