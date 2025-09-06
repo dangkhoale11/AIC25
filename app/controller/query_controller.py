@@ -44,13 +44,16 @@ class QueryController:
         self,
         model: KeyframeServiceReponse
     ) -> tuple[str, float]:
+        # chọn prefix dựa trên batch
+        prefix = "L" if self.batch == 1 else "K"
+
         return os.path.join(
             self.data_folder,
-            f"L{model.group_num:02d}",
+            f"{prefix}{model.group_num:02d}",
             f"V{model.video_num:03d}",
             f"{model.keyframe_num:06d}.webp"
         ), model.confidence_score
-    
+        
         
     async def search_text(
         self, 

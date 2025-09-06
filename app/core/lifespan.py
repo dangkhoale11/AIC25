@@ -52,12 +52,12 @@ async def lifespan(app: FastAPI):
         database = mongo_client[mongo_settings.MONGO_DB]
         await init_beanie(
             database=database,
-            document_models=[Keyframe]
+            document_models=[Keyframe[0], Keyframe[1]]
         )
         logger.info("Beanie initialized successfully")
         
         app.state.service_factories = {}
-        for batch in [1, 2, 3]:
+        for batch in [1, 2]:
             logger.info(f"Initializing service factory for batch {batch}...")
 
             milvus_search_params = {

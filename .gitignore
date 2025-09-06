@@ -210,3 +210,6 @@ all_embeddings.pt
 vector_data.pkl
 
 app/id2index.json
+
+Data
+batch2.pt
