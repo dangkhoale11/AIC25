@@ -178,29 +178,42 @@ with col1:
 with col2:
     score_threshold = st.slider("🎯 Min Score", 0.0, 1.0, 0.0, 0.1)
 
-# --- Search Modes ---
+# --- General Settings ---
 st.markdown("---")
-st.markdown("### 🎛️ Search Modes")
+st.markdown("### ⚙️ General Settings")
 
-search_mode = st.radio(
-    "Select Search Mode",
-    ["Normal Search", "Search with Exclude Group", "Search with Group and Video"],
-    horizontal=True
-)
+col_batch, col_cache = st.columns(2)
+with col_batch:
+    batch_mode = st.radio(
+        "Select Search Batch",
+        ["Batch 1", "Batch 2", "Batch 3"],
+        horizontal=True,
+        help="Select the data batch to search against."
+    )
+    search_mode_map = {"Batch 1": "batch-1", "Batch 2": "batch-2", "Batch 3": "batch-3"}
+    search_mode = search_mode_map[batch_mode]
 
-if search_mode == "Search with Exclude Group":
-    exclude_groups_input = st.text_input("Group IDs to exclude", placeholder="e.g., 1, 3, 7")
-    exclude_groups = [int(x.strip()) for x in exclude_groups_input.split(',') if x.strip()] if exclude_groups_input else []
+with col_cache:
+    use_cache = st.toggle(
+        "Enable Search Cache",
+        value=False,
+        help="Enable caching for search and rerank queries. Does not affect temporal search."
+    )
 
-elif search_mode == "Search with Group and Video":
-    col_grp, col_vid = st.columns(2)
-    with col_grp:
-        include_groups_input = st.text_input("Group IDs to include", placeholder="e.g., 2, 4")
-        include_groups = [int(x.strip()) for x in include_groups_input.split(',') if x.strip()] if include_groups_input else []
-        print(include_groups)
-    with col_vid:
-        include_videos_input = st.text_input("Video IDs to include", placeholder="e.g., 101, 203")
-        include_videos = [int(x.strip()) for x in include_videos_input.split(',') if x.strip()] if include_videos_input else []
+# --- Search Filters ---
+st.markdown("---")
+st.markdown("### 🎛️ Search Filters")
+
+exclude_groups_input = st.text_input("Exclude Group IDs", placeholder="e.g., 1, 3, 7")
+exclude_groups = [int(x.strip()) for x in exclude_groups_input.split(',') if x.strip()] if exclude_groups_input else []
+
+col_grp, col_vid = st.columns(2)
+with col_grp:
+    include_groups_input = st.text_input("Include Group IDs", placeholder="e.g., 2, 4")
+    include_groups = [int(x.strip()) for x in include_groups_input.split(',') if x.strip()] if include_groups_input else []
+with col_vid:
+    include_videos_input = st.text_input("Include Video IDs", placeholder="e.g., 101, 203")
+    include_videos = [int(x.strip()) for x in include_videos_input.split(',') if x.strip()] if include_videos_input else []
 
 # --- Reranking Options ---
 st.markdown("---")
@@ -233,23 +246,34 @@ if st.button("🚀 Search", use_container_width=True):
         st.error("Please enter both a start and end query for temporal search.")
     else:
         with st.spinner("🔍 Searching..."):
-            # Determine endpoint and base payload
+            # Base payload for all requests
+            payload = {
+                "query": query,
+                "top_k": top_k,
+                "score_threshold": score_threshold,
+                "search_mode": search_mode,
+                "use_cache": use_cache,
+            }
+
+            # Determine endpoint and update payload based on filters
             if use_rerank:
                 endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/rerank"
-                payload = {
-                    "query": query, "top_k": top_k, "score_threshold": score_threshold,
-                    "rerank_type": "GEM", "p_qe": p_qe, "p_dr": p_dr,
-                    "m_neighbors": m_neighbors, "sim_metric": sim_metric,
-                }
-            elif search_mode == "Normal Search":
-                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
-            elif search_mode == "Search with Exclude Group":
+                payload.update({
+                    "rerank_type": "GEM",
+                    "p_qe": p_qe,
+                    "p_dr": p_dr,
+                    "m_neighbors": m_neighbors,
+                    "sim_metric": sim_metric,
+                })
+            elif exclude_groups:
                 endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "exclude_groups": exclude_groups}
-            elif search_mode =="Search with Group and Video": # Search with Group and Video
+                payload["exclude_groups"] = exclude_groups
+            elif include_groups or include_videos:
                 endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "include_groups": include_groups, "include_videos": include_videos}
+                payload["include_groups"] = include_groups
+                payload["include_videos"] = include_videos
+            else:
+                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search"
 
             # Add temporal search parameters if enabled
             if use_temporal:

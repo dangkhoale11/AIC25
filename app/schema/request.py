@@ -7,7 +7,8 @@ class BaseSearchRequest(BaseModel):
     query: str = Field(..., description="Search query text", min_length=1, max_length=1000)
     top_k: int = Field(default=10, ge=1, le=500, description="Number of top results to return")
     score_threshold: float = Field(default=0.0, ge=0.0, le=1.0, description="Minimum confidence score threshold")
-    search_mode: str = Field(default="batch-1", description="Search mode ('batch-1' or 'batch-2')")
+    search_mode: str = Field(default="batch-1", description="Search mode ('batch-1', 'batch-2', or 'batch-3')")
+    use_cache: bool = Field(default=False, description="Enable caching for this request")
 
 
 class TemporalSearchMixin(BaseModel):
@@ -46,6 +47,7 @@ class OcrRerankRequest(BaseModel):
     ocr_query: str = Field(..., description="OCR search query text", min_length=1, max_length=1000)
     top_k: int = Field(default=10, ge=1, le=500, description="Number of top results to return")
     ocr_weight: float = Field(default=0.5, ge=0.0, le=1.0, description="Weight for OCR score in re-ranking")
+    search_mode: str = Field(default="batch-1", description="Search mode ('batch-1', 'batch-2', or 'batch-3')")
 
 
 class TextSearchWithSelectedGroupsAndVideosRequest(BaseSearchRequest, TemporalSearchMixin):

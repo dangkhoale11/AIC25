@@ -121,35 +121,41 @@ def get_milvus_repository(service_factory: ServiceFactory = Depends(get_service_
 def get_query_controller(
     model_service: ModelService = Depends(get_model_service),
     service_factory: ServiceFactory = Depends(get_service_factory),
-    app_settings: AppSettings = Depends(get_app_settings)
+    app_settings: AppSettings = Depends(get_app_settings),
 ) -> QueryController:
     """Get query controller instance"""
     try:
         logger.info("Creating query controller...")
-        
-        data_folder = Path(app_settings.DATA_FOLDER)
+
+        # Ensure data folders and index file exist
+        data_folders = [
+            app_settings.DATA_FOLDER,
+            app_settings.DATA_FOLDER_BATCH_2,
+            app_settings.DATA_FOLDER_BATCH_3,
+        ]
+        for folder in data_folders:
+            if folder:
+                p = Path(folder)
+                if not p.exists():
+                    logger.warning(f"Data folder does not exist: {p}")
+                    p.mkdir(parents=True, exist_ok=True)
+
         id2index_path = Path(app_settings.ID2INDEX_PATH)
-        print(id2index_path)
-        if not data_folder.exists():
-            logger.warning(f"Data folder does not exist: {data_folder}")
-            data_folder.mkdir(parents=True, exist_ok=True)
-            
         if not id2index_path.exists():
             logger.warning(f"ID2Index file does not exist: {id2index_path}")
             id2index_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(id2index_path, 'w') as f:
+            with open(id2index_path, "w") as f:
                 json.dump({}, f)
-        
+
         controller = QueryController(
-            data_folder=data_folder,
-            id2index_path=id2index_path,
+            settings=app_settings,
             model_service=model_service,
-            service_factory=service_factory
+            service_factory=service_factory,
         )
-        
+
         logger.info("Query controller created successfully")
         return controller
-        
+
     except Exception as e:
         logger.error(f"Failed to create query controller: {str(e)}")
         raise HTTPException(

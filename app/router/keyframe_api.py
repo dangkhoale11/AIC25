@@ -59,12 +59,12 @@ async def _handle_search_response(
 
             start_frame_display = None
             if start_frame:
-                path, score = controller.convert_model_to_path(start_frame)
+                path, score = controller.convert_model_to_path(start_frame, request.search_mode)
                 start_frame_display = SingleKeyframeDisplay(path=path, score=score, key=start_frame.key)
 
             end_frame_display = None
             if end_frame:
-                path, score = controller.convert_model_to_path(end_frame)
+                path, score = controller.convert_model_to_path(end_frame, request.search_mode)
                 end_frame_display = SingleKeyframeDisplay(path=path, score=score, key=end_frame.key)
 
             if start_frame_display and end_frame_display:
@@ -78,7 +78,7 @@ async def _handle_search_response(
         logger.info(f"Found {len(initial_results)} results for query: '{request.query}'")
         display_results = []
         for r in initial_results:
-            path, score = controller.convert_model_to_path(r)
+            path, score = controller.convert_model_to_path(r, request.search_mode)
             display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
         return KeyframeDisplay(results=display_results, raw_results=initial_results)
 
@@ -110,6 +110,7 @@ async def search_with_rerank(
         p_dr=request.p_dr,
         m_neighbors=request.m_neighbors,
         sim_metric=request.sim_metric,
+        use_cache=request.use_cache,
     )
 
     return await _handle_search_response(request, results, controller)
@@ -135,7 +136,8 @@ async def search_keyframes(
         query=request.query,
         top_k=request.top_k,
         score_threshold=request.score_threshold,
-        search_mode=request.search_mode
+        search_mode=request.search_mode,
+        use_cache=request.use_cache,
     )
     
     return await _handle_search_response(request, results, controller)
@@ -169,7 +171,7 @@ async def rerank_keyframes_with_ocr(
 
     display_results = []
     for r in results:
-        path, score = controller.convert_model_to_path(r)
+        path, score = controller.convert_model_to_path(r, request.search_mode)
         display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
     return KeyframeDisplay(results=display_results, raw_results=results)
 
@@ -200,14 +202,15 @@ async def search_keyframes_with_ocr_filter(
         top_k=request.top_k,
         score_threshold=request.score_threshold,
         ocr_weight=request.ocr_weight,
-        search_mode=request.search_mode
+        search_mode=request.search_mode,
+        use_cache=request.use_cache,
     )
 
     logger.info(f"Found {len(results)} results with OCR filtering")
 
     display_results = []
     for r in results:
-        path, score = controller.convert_model_to_path(r)
+        path, score = controller.convert_model_to_path(r, request.search_mode)
         display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
     return KeyframeDisplay(results=display_results, raw_results=results)
 
@@ -232,7 +235,8 @@ async def search_keyframes_exclude_groups(
         top_k=request.top_k,
         score_threshold=request.score_threshold,
         list_group_exlude=request.exclude_groups,
-        search_mode=request.search_mode
+        search_mode=request.search_mode,
+        use_cache=request.use_cache,
     )
     
     return await _handle_search_response(request, results, controller)
@@ -260,7 +264,8 @@ async def search_keyframes_selected_groups_videos(
         score_threshold=request.score_threshold,
         list_of_include_groups=request.include_groups,
         list_of_include_videos=request.include_videos,
-        search_mode=request.search_mode
+        search_mode=request.search_mode,
+        use_cache=request.use_cache,
     )
     
     return await _handle_search_response(request, results, controller)

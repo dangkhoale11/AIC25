@@ -37,9 +37,14 @@ class KeyFrameIndexMilvusSettingBatch2(KeyFrameIndexMilvusSetting):
     COLLECTION_NAME: str = "keyframe_batch2"
 
 
+class KeyFrameIndexMilvusSettingBatch3(KeyFrameIndexMilvusSetting):
+    COLLECTION_NAME: str = "keyframe_batch3"
+
+
 class MilvusSettings(BaseSettings):
     batch_1: KeyFrameIndexMilvusSetting = KeyFrameIndexMilvusSetting()
     batch_2: KeyFrameIndexMilvusSettingBatch2 = KeyFrameIndexMilvusSettingBatch2()
+    batch_3: KeyFrameIndexMilvusSettingBatch3 = KeyFrameIndexMilvusSettingBatch3()
 
 
 class OcrIndexMilvusSetting(BaseSettings):
@@ -53,7 +58,10 @@ class OcrIndexMilvusSetting(BaseSettings):
 
 
 class AppSettings(BaseSettings):
-    DATA_FOLDER: str  = "C:/HCMAI2025_Baseline/Data"
+    DATA_FOLDER: str = "C:/HCMAI2025_Baseline/Data"
+    DATA_FOLDER_BATCH_2: str | None = None
+    DATA_FOLDER_BATCH_3: str | None = None
     ID2INDEX_PATH: str = "id2index.json"
     MODEL_NAME: str = "hf-hub:laion/CLIP-convnext_xxlarge-laion2B-s34B-b82K-augreg-soup"
     MODEL_OCR_NAME: str = "all-MiniLM-L6-v2"
+    USE_CACHE: bool = Field(False, description="Enable caching for search and rerank queries")

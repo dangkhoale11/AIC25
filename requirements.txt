@@ -2,3 +2,4 @@ sentence-transformers
 # Dùng googletrans bản chính thức hoặc fork ổn định
 googletrans==4.0.0-rc1
 # hoặc thay bằng fork này nếu conflict: googletrans-py
+cachetools
