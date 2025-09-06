@@ -57,7 +57,7 @@ async def lifespan(app: FastAPI):
         logger.info("Beanie initialized successfully")
         
         app.state.service_factories = {}
-        for batch in [1, 2]:
+        for batch in [1, 2, 3]:
             logger.info(f"Initializing service factory for batch {batch}...")
 
             milvus_search_params = {
