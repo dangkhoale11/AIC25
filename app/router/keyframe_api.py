@@ -18,6 +18,7 @@ from schema.response import (
     KeyframeDisplay,
     TemporalSearchResponse,
     TemporalEvent,
+    RerankSearchResponse,
 )
 from controller.query_controller import QueryController
 from core.dependencies import get_query_controller
@@ -38,10 +39,11 @@ async def _handle_search_response(
     request: Union[TextSearchRequest, RerankSearchRequest],
     initial_results: list[KeyframeServiceReponse],
     controller: QueryController
-) -> Union[KeyframeDisplay, TemporalSearchResponse]:
+) -> Union[KeyframeDisplay, TemporalSearchResponse, RerankSearchResponse]:
     """
-    Handles the response logic for a search request, including optional temporal search.
+    Handles the response logic for a search request, including optional temporal search and reranking.
     """
+    # Temporal search has the highest priority
     if request.use_temporal and request.temporal_start_query and request.temporal_end_query:
         logger.info("Performing temporal search on initial results.")
         temporal_events_data = await controller.search_temporal(
@@ -55,36 +57,43 @@ async def _handle_search_response(
         for event_data in temporal_events_data:
             start_frame = event_data.get("start_frame")
             end_frame = event_data.get("end_frame")
-
             start_frame_display = None
             if start_frame:
                 path, score = controller.convert_model_to_path(start_frame)
                 start_frame_display = SingleKeyframeDisplay(path=path, score=score, key=start_frame.key)
-
             end_frame_display = None
             if end_frame:
                 path, score = controller.convert_model_to_path(end_frame)
                 end_frame_display = SingleKeyframeDisplay(path=path, score=score, key=end_frame.key)
-
             if start_frame_display and end_frame_display:
                 temporal_events.append(
                     TemporalEvent(start_frame=start_frame_display, end_frame=end_frame_display)
                 )
-
         return TemporalSearchResponse(events=temporal_events)
 
-    else:
-        logger.info(f"Found {len(initial_results)} results for query: '{request.query}'")
-        display_results = []
-        for r in initial_results:
-            path, score = controller.convert_model_to_path(r)
-            display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
-        return KeyframeDisplay(results=display_results, raw_results=initial_results)
+    # If not temporal, convert results to display format
+    display_results = []
+    for r in initial_results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
+
+    # Check if it was a rerank request
+    if isinstance(request, RerankSearchRequest):
+        logger.info(f"Returning reranked results for query: '{request.query}'")
+        return RerankSearchResponse(
+            results=display_results,
+            raw_results=initial_results,
+            rerank_type=request.rerank_type,
+        )
+
+    # Otherwise, it's a standard search
+    logger.info(f"Found {len(initial_results)} results for query: '{request.query}'")
+    return KeyframeDisplay(results=display_results, raw_results=initial_results)
 
 
 @router.post(
     "/search/rerank",
-    response_model=Union[KeyframeDisplay, TemporalSearchResponse],
+    response_model=Union[KeyframeDisplay, TemporalSearchResponse, RerankSearchResponse],
     summary="Search with reranking",
     description="Perform a search and then rerank the results using a specified method. Can be combined with temporal search.",
     response_description="List of reranked keyframes or temporal search results."
@@ -135,6 +144,19 @@ async def search_keyframes(
     )
     
     return await _handle_search_response(request, results, controller)
+
+
+@router.post("/cache/clear", status_code=200)
+async def clear_cache():
+    """
+    Clears any server-side caches.
+    Note: In the current implementation, caches are not explicitly used,
+    but this endpoint is provided for future use and to satisfy the UI.
+    """
+    logger.info("Cache clear endpoint called.")
+    # In a real-world scenario, you would clear caches here, e.g.:
+    # await some_cache_service.clear_all()
+    return {"message": "Cache cleared successfully."}
 
 
 @router.post(

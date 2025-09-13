@@ -31,3 +31,10 @@ class TemporalEvent(BaseModel):
 class TemporalSearchResponse(BaseModel):
     """Response for temporal search, containing a list of events."""
     events: List[TemporalEvent]
+
+
+class RerankSearchResponse(BaseModel):
+    """Response for a reranked search, containing the reranked results."""
+    results: list[SingleKeyframeDisplay]
+    raw_results: Optional[List[KeyframeServiceReponse]] = None
+    rerank_type: str
