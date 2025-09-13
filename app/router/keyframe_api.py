@@ -9,7 +9,6 @@ from schema.request import (
     TextSearchWithSelectedGroupsAndVideosRequest,
     TextSearchWithOcrRequest,
     OcrRerankRequest,
-    RerankSearchRequest,
     SearchStepRequest,
 )
 from schema.response import (
@@ -36,20 +35,34 @@ router = APIRouter(
 
 
 async def _handle_search_response(
-    request: Union[TextSearchRequest, RerankSearchRequest],
+    request: TextSearchRequest,
     initial_results: list[KeyframeServiceReponse],
     controller: QueryController
 ) -> Union[KeyframeDisplay, TemporalSearchResponse, RerankSearchResponse]:
     """
-    Handles the response logic for a search request, including optional temporal search and reranking.
+    Handles the response logic for a search request, including optional reranking and temporal search.
     """
-    # Temporal search has the highest priority
+    results = initial_results
+
+    if request.use_rerank:
+        logger.info("Performing reranking on initial results.")
+        results = await controller.rerank(
+            query=request.query,
+            initial_results=results,
+            top_k=request.top_k,
+            rerank_type=request.rerank_type,
+            p_qe=request.p_qe,
+            p_dr=request.p_dr,
+            m_neighbors=request.m_neighbors,
+            sim_metric=request.sim_metric,
+        )
+
     if request.use_temporal and request.temporal_start_query and request.temporal_end_query:
-        logger.info("Performing temporal search on initial results.")
+        logger.info("Performing temporal search on results.")
         temporal_events_data = await controller.search_temporal(
             start_query=request.temporal_start_query,
             end_query=request.temporal_end_query,
-            search_results=initial_results,
+            search_results=results,
             search_range=request.temporal_search_range,
         )
 
@@ -57,74 +70,39 @@ async def _handle_search_response(
         for event_data in temporal_events_data:
             start_frame = event_data.get("start_frame")
             end_frame = event_data.get("end_frame")
+
             start_frame_display = None
             if start_frame:
                 path, score = controller.convert_model_to_path(start_frame)
                 start_frame_display = SingleKeyframeDisplay(path=path, score=score, key=start_frame.key)
+
             end_frame_display = None
             if end_frame:
                 path, score = controller.convert_model_to_path(end_frame)
                 end_frame_display = SingleKeyframeDisplay(path=path, score=score, key=end_frame.key)
+
             if start_frame_display and end_frame_display:
                 temporal_events.append(
                     TemporalEvent(start_frame=start_frame_display, end_frame=end_frame_display)
                 )
+
         return TemporalSearchResponse(events=temporal_events)
 
-    # If not temporal, convert results to display format
     display_results = []
-    for r in initial_results:
+    for r in results:
         path, score = controller.convert_model_to_path(r)
         display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
 
-    # Check if it was a rerank request
-    if isinstance(request, RerankSearchRequest):
-        logger.info(f"Returning reranked results for query: '{request.query}'")
-        return RerankSearchResponse(
-            results=display_results,
-            raw_results=initial_results,
-            rerank_type=request.rerank_type,
-        )
-
-    # Otherwise, it's a standard search
-    logger.info(f"Found {len(initial_results)} results for query: '{request.query}'")
-    return KeyframeDisplay(results=display_results, raw_results=initial_results)
-
-
-@router.post(
-    "/search/rerank",
-    response_model=Union[KeyframeDisplay, TemporalSearchResponse, RerankSearchResponse],
-    summary="Search with reranking",
-    description="Perform a search and then rerank the results using a specified method. Can be combined with temporal search.",
-    response_description="List of reranked keyframes or temporal search results."
-)
-async def search_with_rerank(
-    request: RerankSearchRequest,
-    controller: QueryController = Depends(get_query_controller)
-):
-    """
-    Search for keyframes with reranking.
-    """
-    logger.info(f"Rerank search request: query='{request.query}', rerank_type='{request.rerank_type}'")
-
-    results = await controller.search_with_rerank(
-        query=request.query,
-        top_k=request.top_k,
-        score_threshold=request.score_threshold,
-        rerank_type=request.rerank_type,
-        # ocr_query=request.ocr_query,
-        p_qe=request.p_qe,
-        p_dr=request.p_dr,
-        m_neighbors=request.m_neighbors,
-        sim_metric=request.sim_metric,
-    )
-
-    return await _handle_search_response(request, results, controller)
+    if request.use_rerank:
+        return RerankSearchResponse(results=display_results, raw_results=results, rerank_type=request.rerank_type)
+    else:
+        logger.info(f"Found {len(results)} results for query: '{request.query}'")
+        return KeyframeDisplay(results=display_results, raw_results=results)
 
 
 @router.post(
     "/search",
-    response_model=Union[KeyframeDisplay, TemporalSearchResponse],
+    response_model=Union[KeyframeDisplay, TemporalSearchResponse, RerankSearchResponse],
     summary="Simple text search for keyframes",
     description="Perform a simple text-based search for keyframes. Can be combined with temporal search.",
     response_description="List of matching keyframes or temporal search results."

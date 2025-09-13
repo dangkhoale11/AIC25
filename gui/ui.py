@@ -254,22 +254,27 @@ if st.button("🚀 Search", use_container_width=True):
             # Determine endpoint and base payload
             base_endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe"
 
-            if use_rerank:
-                endpoint = f"{base_endpoint}/search/rerank?batch={batch}"
-                payload = {
-                    "query": query, "top_k": top_k, "score_threshold": score_threshold,
-                    "rerank_type": "GEM", "p_qe": p_qe, "p_dr": p_dr,
-                    "m_neighbors": m_neighbors, "sim_metric": sim_metric,
-                }
-            elif search_mode == "Normal Search":
-                endpoint = f"{base_endpoint}/search?batch={batch}"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
-            elif search_mode == "Search with Exclude Group":
+            endpoint = f"{base_endpoint}/search?batch={batch}"
+            payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
+
+            if search_mode == "Search with Exclude Group":
                 endpoint = f"{base_endpoint}/search/exclude-groups?batch={batch}"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "exclude_groups": exclude_groups}
-            elif search_mode =="Search with Group and Video": # Search with Group and Video
+                payload["exclude_groups"] = exclude_groups
+            elif search_mode == "Search with Group and Video":
                 endpoint = f"{base_endpoint}/search/selected-groups-videos?batch={batch}"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "include_groups": include_groups, "include_videos": include_videos}
+                payload["include_groups"] = include_groups
+                payload["include_videos"] = include_videos
+
+            # Add rerank parameters if enabled
+            if use_rerank:
+                payload.update({
+                    "use_rerank": True,
+                    "rerank_type": "GEM",
+                    "p_qe": p_qe,
+                    "p_dr": p_dr,
+                    "m_neighbors": m_neighbors,
+                    "sim_metric": sim_metric,
+                })
 
             # Add temporal search parameters if enabled
             if use_temporal:
@@ -285,16 +290,23 @@ if st.button("🚀 Search", use_container_width=True):
 
                 if response.status_code == 200:
                     data = response.json()
-                    # Check if the response is for a temporal search or a normal search
+                    st.session_state.search_results = []
+                    st.session_state.raw_search_results = []
+                    st.session_state.temporal_results = None
+
                     if 'events' in data:
                         st.session_state.temporal_results = data.get("events", [])
-                        st.session_state.search_results = []
-                        st.session_state.raw_search_results = []
                         st.success(f"✅ Temporal search complete! Found {len(st.session_state.temporal_results)} events.")
+
+                    elif 'rerank_type' in data:
+                        st.session_state.search_results = data.get("results", [])
+                        st.session_state.raw_search_results = data.get("raw_results", [])
+                        rerank_type = data.get('rerank_type', 'N/A')
+                        st.success(f"✅ Found and reranked {len(st.session_state.search_results)} results using {rerank_type} method!")
+
                     else:
                         st.session_state.search_results = data.get("results", [])
                         st.session_state.raw_search_results = data.get("raw_results", [])
-                        st.session_state.temporal_results = None
                         st.success(f"✅ Found {len(st.session_state.search_results)} results!")
                 else:
                     st.error(f"❌ API Error: {response.status_code} - {response.text}")

@@ -336,24 +336,22 @@ class KeyframeQueryService:
     # ------------------------
     # Entry point
     # ------------------------
-    async def search_with_rerank(
+    async def rerank(
         self,
-        text_embedding: list[float],
+        initial_results: list,
+        query_embedding: list[float],
         top_k: int,
         method: str = "GEM",   # "ocr" | "gem" | "temporal"
         # ocr_embedding: list[float] = None,
-        score_threshold: float = 0.5,
         p_qe: float = 3.0,
         p_dr: float = 3.0,
         m_neighbors: int = 5,
         sim_metric: str = "cosine",
     ):
-        initial_results = await self._search_keyframes(text_embedding, top_k, score_threshold)
-
         # if method == "OCR" and ocr_embedding is not None:
         #     return await self.rerank_by_ocr(initial_results, ocr_embedding, top_k)
         if method == "GEM":
             return await self.rerank_by_gem(
-                initial_results, text_embedding, top_k,
+                initial_results, query_embedding, top_k,
                 m_neighbors=m_neighbors, p_qe=p_qe, p_dr=p_dr, sim_metric=sim_metric
             )
