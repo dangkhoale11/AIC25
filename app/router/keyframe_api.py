@@ -9,7 +9,6 @@ from schema.request import (
     TextSearchWithSelectedGroupsAndVideosRequest,
     TextSearchWithOcrRequest,
     OcrRerankRequest,
-    RerankSearchRequest,
     SearchStepRequest,
 )
 from schema.response import (
@@ -18,6 +17,7 @@ from schema.response import (
     KeyframeDisplay,
     TemporalSearchResponse,
     TemporalEvent,
+    RerankSearchResponse,
 )
 from controller.query_controller import QueryController
 from core.dependencies import get_query_controller
@@ -35,19 +35,34 @@ router = APIRouter(
 
 
 async def _handle_search_response(
-    request: Union[TextSearchRequest, RerankSearchRequest],
+    request: TextSearchRequest,
     initial_results: list[KeyframeServiceReponse],
     controller: QueryController
-) -> Union[KeyframeDisplay, TemporalSearchResponse]:
+) -> Union[KeyframeDisplay, TemporalSearchResponse, RerankSearchResponse]:
     """
-    Handles the response logic for a search request, including optional temporal search.
+    Handles the response logic for a search request, including optional reranking and temporal search.
     """
+    results = initial_results
+
+    if request.use_rerank:
+        logger.info("Performing reranking on initial results.")
+        results = await controller.rerank(
+            query=request.query,
+            initial_results=results,
+            top_k=request.top_k,
+            rerank_type=request.rerank_type,
+            p_qe=request.p_qe,
+            p_dr=request.p_dr,
+            m_neighbors=request.m_neighbors,
+            sim_metric=request.sim_metric,
+        )
+
     if request.use_temporal and request.temporal_start_query and request.temporal_end_query:
-        logger.info("Performing temporal search on initial results.")
+        logger.info("Performing temporal search on results.")
         temporal_events_data = await controller.search_temporal(
             start_query=request.temporal_start_query,
             end_query=request.temporal_end_query,
-            search_results=initial_results,
+            search_results=results,
             search_range=request.temporal_search_range,
         )
 
@@ -73,49 +88,21 @@ async def _handle_search_response(
 
         return TemporalSearchResponse(events=temporal_events)
 
+    display_results = []
+    for r in results:
+        path, score = controller.convert_model_to_path(r)
+        display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
+
+    if request.use_rerank:
+        return RerankSearchResponse(results=display_results, raw_results=results, rerank_type=request.rerank_type)
     else:
-        logger.info(f"Found {len(initial_results)} results for query: '{request.query}'")
-        display_results = []
-        for r in initial_results:
-            path, score = controller.convert_model_to_path(r)
-            display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
-        return KeyframeDisplay(results=display_results, raw_results=initial_results)
-
-
-@router.post(
-    "/search/rerank",
-    response_model=Union[KeyframeDisplay, TemporalSearchResponse],
-    summary="Search with reranking",
-    description="Perform a search and then rerank the results using a specified method. Can be combined with temporal search.",
-    response_description="List of reranked keyframes or temporal search results."
-)
-async def search_with_rerank(
-    request: RerankSearchRequest,
-    controller: QueryController = Depends(get_query_controller)
-):
-    """
-    Search for keyframes with reranking.
-    """
-    logger.info(f"Rerank search request: query='{request.query}', rerank_type='{request.rerank_type}'")
-
-    results = await controller.search_with_rerank(
-        query=request.query,
-        top_k=request.top_k,
-        score_threshold=request.score_threshold,
-        rerank_type=request.rerank_type,
-        # ocr_query=request.ocr_query,
-        p_qe=request.p_qe,
-        p_dr=request.p_dr,
-        m_neighbors=request.m_neighbors,
-        sim_metric=request.sim_metric,
-    )
-
-    return await _handle_search_response(request, results, controller)
+        logger.info(f"Found {len(results)} results for query: '{request.query}'")
+        return KeyframeDisplay(results=display_results, raw_results=results)
 
 
 @router.post(
     "/search",
-    response_model=Union[KeyframeDisplay, TemporalSearchResponse],
+    response_model=Union[KeyframeDisplay, TemporalSearchResponse, RerankSearchResponse],
     summary="Simple text search for keyframes",
     description="Perform a simple text-based search for keyframes. Can be combined with temporal search.",
     response_description="List of matching keyframes or temporal search results."
@@ -124,8 +111,7 @@ async def search_keyframes(
     request: TextSearchRequest,
     controller: QueryController = Depends(get_query_controller)
 ):
-    """
-    Search for keyframes using text query with semantic similarity.
+    """git csemantic similarity.
     """
     logger.info(f"Text search request: query='{request.query}', top_k={request.top_k}, threshold={request.score_threshold}")
     results = await controller.search_text(
@@ -135,6 +121,19 @@ async def search_keyframes(
     )
     
     return await _handle_search_response(request, results, controller)
+
+
+@router.post("/cache/clear", status_code=200)
+async def clear_cache():
+    """
+    Clears any server-side caches.
+    Note: In the current implementation, caches are not explicitly used,
+    but this endpoint is provided for future use and to satisfy the UI.
+    """
+    logger.info("Cache clear endpoint called.")
+    # In a real-world scenario, you would clear caches here, e.g.:
+    # await some_cache_service.clear_all()
+    return {"message": "Cache cleared successfully."}
 
 
 @router.post(

@@ -69,41 +69,31 @@ class QueryController:
         return result
 
 
-    async def search_with_rerank(
+    async def rerank(
         self,
         query: str,
+        initial_results: list,
         top_k: int,
-        score_threshold: float,
         rerank_type: str,
-        # ocr_query: str | None = None,
-        p_qe: float = 3.0,
-        p_dr: float = 3.0,
-        m_neighbors: int = 5,
-        sim_metric: str = "cosine",
+        p_qe: float,
+        p_dr: float,
+        m_neighbors: int,
+        sim_metric: str,
     ):
-
-
         translated_query = self.translator.translate(query)
-        text_embedding = self.model_service.embedding(translated_query).tolist()[0]
+        query_embedding = self.model_service.embedding(translated_query).tolist()[0]
 
-        # ocr_embedding = None
-        # if rerank_type == "ocr" and ocr_query:
-        #     translated_ocr_query = self.translator.translate(ocr_query)
-        #     ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
-
-        result = await self.keyframe_service.search_with_rerank(
-            text_embedding=text_embedding,
+        reranked_results = await self.keyframe_service.rerank(
+            initial_results=initial_results,
+            query_embedding=query_embedding,
             top_k=top_k,
-            score_threshold=score_threshold,
             method=rerank_type,
-            # ocr_embedding=ocr_embedding,
             p_qe=p_qe,
             p_dr=p_dr,
             m_neighbors=m_neighbors,
             sim_metric=sim_metric,
         )
-
-        return result
+        return reranked_results
 
 
     async def search_text_with_exlude_group(

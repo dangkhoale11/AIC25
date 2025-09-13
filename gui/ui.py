@@ -82,33 +82,53 @@ st.markdown("""
         text-align: center; 
         color: #666;
     }
+    .clickable-image {
+        cursor: pointer;
+        transition: transform 0.2s;
+    }
+    .clickable-image:hover {
+        transform: scale(1.05);
+    }
+    .zoomed-image-container {
+        background: white;
+        padding: 1rem;
+        border-radius: 10px;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+        margin: 1rem 0;
+        text-align: center;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-def safe_image_display(image_path: str, width: int = 200, caption: str = ""):
+def safe_image_display(image_path: str, width: int = 200, caption: str = "", clickable: bool = False, key: str = None):
     """
     Safely display an image with fallback options
     """
     try:
         # Method 1: Try direct path if it's a valid file
         if os.path.exists(image_path):
-            st.image(image_path, width=width, caption=caption)
+            st.image(image_path, width=width, caption=caption, use_column_width=False)
+            if clickable:
+                st.markdown(f'<div class="clickable-image" onclick="st.session_state.zoomed_image=\'{image_path}\';st.session_state.zoomed_caption=\'{caption}\'"></div>', unsafe_allow_html=True)
             return True
         
         # Method 2: Try to load from URL if it's a URL
         elif image_path.startswith(('http://', 'https://')):
-            st.image(image_path, width=width, caption=caption)
+            st.image(image_path, width=width, caption=caption, use_column_width=False)
+            if clickable:
+                st.markdown(f'<div class="clickable-image" onclick="st.session_state.zoomed_image=\'{image_path}\';st.session_state.zoomed_caption=\'{caption}\'"></div>', unsafe_allow_html=True)
             return True
         
         # Method 3: Try to get image from API
         elif hasattr(st.session_state, 'api_base_url'):
             try:
-                # Assume there's an endpoint to get the image
                 image_url = f"{st.session_state.api_base_url}/api/v1/keyframe/image?path={image_path}"
                 response = requests.get(image_url, timeout=10)
                 if response.status_code == 200:
                     image = Image.open(BytesIO(response.content))
-                    st.image(image, width=width, caption=caption)
+                    st.image(image, width=width, caption=caption, use_column_width=False)
+                    if clickable:
+                        st.markdown(f'<div class="clickable-image" onclick="st.session_state.zoomed_image=\'{image_path}\';st.session_state.zoomed_caption=\'{caption}\'"></div>', unsafe_allow_html=True)
                     return True
             except:
                 pass
@@ -139,6 +159,25 @@ if 'api_base_url' not in st.session_state:
     st.session_state.api_base_url = "http://127.0.0.1:8000"
 if 'temporal_results' not in st.session_state:
     st.session_state.temporal_results = None
+if 'zoomed_image' not in st.session_state:
+    st.session_state.zoomed_image = None
+if 'zoomed_caption' not in st.session_state:
+    st.session_state.zoomed_caption = ""
+
+# Display zoomed image if selected
+if st.session_state.zoomed_image:
+    st.markdown("---")
+    st.markdown("## 🔎 Zoomed Image")
+    with st.container():
+        st.markdown("""
+        <div class="zoomed-image-container">
+            <h3>Zoomed Image</h3>
+        </div>
+        """, unsafe_allow_html=True)
+        safe_image_display(st.session_state.zoomed_image, width=600, caption=st.session_state.zoomed_caption)
+        if st.button("Close Zoom", key="close_zoom"):
+            st.session_state.zoomed_image = None
+            st.session_state.zoomed_caption = ""
 
 # Header
 st.markdown("""
@@ -174,7 +213,7 @@ query = st.text_input(
 
 col1, col2, col3 = st.columns(3)
 with col1:
-    top_k = st.slider("📊 Max Results", 1, 500, 10) # Increased max for wider temporal search range
+    top_k = st.slider("📊 Max Results", 1, 500, 10)
 with col2:
     score_threshold = st.slider("🎯 Min Score", 0.0, 1.0, 0.0, 0.1)
 with col3:
@@ -199,27 +238,10 @@ elif search_mode == "Search with Group and Video":
     with col_grp:
         include_groups_input = st.text_input("Group IDs to include", placeholder="e.g., 2, 4")
         include_groups = [int(x.strip()) for x in include_groups_input.split(',') if x.strip()] if include_groups_input else []
-        print(include_groups)
     with col_vid:
         include_videos_input = st.text_input("Video IDs to include", placeholder="e.g., 101, 203")
         include_videos = [int(x.strip()) for x in include_videos_input.split(',') if x.strip()] if include_videos_input else []
 
-
-st.markdown("---")
-st.markdown('### Clear Cache')
-if st.button("🧹 Clear Cache", use_container_width=True):
-    try:
-        clear_endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/cache/clear"
-        response = requests.post(clear_endpoint, timeout=10)
-        if response.status_code == 200:
-            st.success("✅ Cache cleared successfully!")
-            st.session_state.search_results = []
-            st.session_state.raw_search_results = []
-            st.session_state.temporal_results = None
-        else:
-            st.error(f"❌ Failed to clear cache: {response.status_code}")
-    except Exception as e:
-        st.error(f"❌ Error clearing cache: {str(e)}")
 # --- Reranking Options ---
 st.markdown("---")
 use_rerank = st.toggle("✨ Enable GEM Reranking")
@@ -241,7 +263,6 @@ if use_temporal:
     end_query_temporal = st.text_input("End of Event Query", placeholder="e.g., person closes door")
     temporal_search_range = st.slider("Results Range to Search", 0, top_k, (0, 20), help=f"Select the start and end index from the top {top_k} results to perform the temporal search on.")
 
-
 # --- Search Button ---
 st.markdown("---")
 if st.button("🚀 Search", use_container_width=True):
@@ -251,27 +272,29 @@ if st.button("🚀 Search", use_container_width=True):
         st.error("Please enter both a start and end query for temporal search.")
     else:
         with st.spinner("🔍 Searching..."):
-            # Determine endpoint and base payload
             base_endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe"
 
-            if use_rerank:
-                endpoint = f"{base_endpoint}/search/rerank?batch={batch}"
-                payload = {
-                    "query": query, "top_k": top_k, "score_threshold": score_threshold,
-                    "rerank_type": "GEM", "p_qe": p_qe, "p_dr": p_dr,
-                    "m_neighbors": m_neighbors, "sim_metric": sim_metric,
-                }
-            elif search_mode == "Normal Search":
-                endpoint = f"{base_endpoint}/search?batch={batch}"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
-            elif search_mode == "Search with Exclude Group":
-                endpoint = f"{base_endpoint}/search/exclude-groups?batch={batch}"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "exclude_groups": exclude_groups}
-            elif search_mode =="Search with Group and Video": # Search with Group and Video
-                endpoint = f"{base_endpoint}/search/selected-groups-videos?batch={batch}"
-                payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "include_groups": include_groups, "include_videos": include_videos}
+            endpoint = f"{base_endpoint}/search?batch={batch}"
+            payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
 
-            # Add temporal search parameters if enabled
+            if search_mode == "Search with Exclude Group":
+                endpoint = f"{base_endpoint}/search/exclude-groups?batch={batch}"
+                payload["exclude_groups"] = exclude_groups
+            elif search_mode == "Search with Group and Video":
+                endpoint = f"{base_endpoint}/search/selected-groups-videos?batch={batch}"
+                payload["include_groups"] = include_groups
+                payload["include_videos"] = include_videos
+
+            if use_rerank:
+                payload.update({
+                    "use_rerank": True,
+                    "rerank_type": "GEM",
+                    "p_qe": p_qe,
+                    "p_dr": p_dr,
+                    "m_neighbors": m_neighbors,
+                    "sim_metric": sim_metric,
+                })
+
             if use_temporal:
                 payload.update({
                     "use_temporal": True,
@@ -285,16 +308,24 @@ if st.button("🚀 Search", use_container_width=True):
 
                 if response.status_code == 200:
                     data = response.json()
-                    # Check if the response is for a temporal search or a normal search
+                    st.session_state.search_results = []
+                    st.session_state.raw_search_results = []
+                    st.session_state.temporal_results = None
+                    st.session_state.zoomed_image = None
+                    st.session_state.zoomed_caption = ""
+
                     if 'events' in data:
                         st.session_state.temporal_results = data.get("events", [])
-                        st.session_state.search_results = []
-                        st.session_state.raw_search_results = []
                         st.success(f"✅ Temporal search complete! Found {len(st.session_state.temporal_results)} events.")
-                    else:
+
+                    if 'rerank_type' in data:
                         st.session_state.search_results = data.get("results", [])
                         st.session_state.raw_search_results = data.get("raw_results", [])
-                        st.session_state.temporal_results = None
+                        rerank_type = data.get('rerank_type', 'N/A')
+                        st.success(f"✅ Found and reranked {len(st.session_state.search_results)} results using {rerank_type} method!")
+                    elif 'results' in data:
+                        st.session_state.search_results = data.get("results", [])
+                        st.session_state.raw_search_results = data.get("raw_results", [])
                         st.success(f"✅ Found {len(st.session_state.search_results)} results!")
                 else:
                     st.error(f"❌ API Error: {response.status_code} - {response.text}")
@@ -308,7 +339,6 @@ if st.session_state.search_results:
     st.markdown("---")
     st.markdown("## 📋 Search Results")
 
-    # CSV export for normal search
     if st.session_state.search_results:
         sorted_results_for_csv = sorted(st.session_state.search_results, key=lambda x: x['score'], reverse=True)
         csv_data = "video_file_name,Frame Idx\n"
@@ -327,7 +357,7 @@ if st.session_state.search_results:
         with st.container():
             col_img, col_info = st.columns([1, 3])
             with col_img:
-                if not safe_image_display(result['path'], width=200, caption=f"Result {i+1}"):
+                if not safe_image_display(result['path'], width=200, caption=f"Result {i+1}", clickable=True, key=f"result_{i}"):
                     display_image_placeholder(f"Result {i+1}")
             with col_info:
                 st.markdown(f"""
@@ -348,7 +378,6 @@ if st.session_state.temporal_results:
 
     events = st.session_state.temporal_results
     if events:
-        # CSV export for temporal search
         try:
             temporal_csv_data = "video_file_name,start_Idx,end_Idx\n"
             for event in events:
@@ -365,7 +394,6 @@ if st.session_state.temporal_results:
         except (IndexError, KeyError):
             st.warning("Could not generate temporal search CSV due to unexpected path format.")
 
-        # Display frames
         for i, event in enumerate(events):
             st.markdown(f"#### Event #{i+1}")
             start_frame = event.get("start_frame")
@@ -375,13 +403,13 @@ if st.session_state.temporal_results:
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("##### Start Frame")
-                    if not safe_image_display(start_frame["path"]):
+                    if not safe_image_display(start_frame["path"], clickable=True, key=f"start_frame_{i}"):
                         display_image_placeholder("Start Frame")
                     st.markdown(f"<p><strong>Path:</strong> {start_frame['path']}</p>", unsafe_allow_html=True)
                     st.markdown(f"<p><strong>Score:</strong> {start_frame['score']:.3f}</p>", unsafe_allow_html=True)
                 with col2:
                     st.markdown("##### End Frame")
-                    if not safe_image_display(end_frame["path"]):
+                    if not safe_image_display(end_frame["path"], clickable=True, key=f"end_frame_{i}"):
                         display_image_placeholder("End Frame")
                     st.markdown(f"<p><strong>Path:</strong> {end_frame['path']}</p>", unsafe_allow_html=True)
                     st.markdown(f"<p><strong>Score:</strong> {end_frame['score']:.3f}</p>", unsafe_allow_html=True)
