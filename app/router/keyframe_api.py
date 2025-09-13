@@ -172,73 +172,6 @@ async def search_step(
     return KeyframeDisplay(results=display_results, raw_results=results)
 
 
-# @router.post(
-#     "/rerank/ocr",
-#     response_model=KeyframeDisplay,
-#     summary="Re-rank keyframes with OCR",
-#     description="Re-rank a list of keyframes based on an OCR query.",
-#     response_description="List of re-ranked keyframes with confidence scores"
-# )
-# async def rerank_keyframes_with_ocr(
-#     request: OcrRerankRequest,
-#     controller: QueryController = Depends(get_query_controller)
-# ):
-#     """
-#     Re-rank keyframes with OCR filtering.
-#     """
-#     logger.info(f"OCR rerank request: ocr_query='{request.ocr_query}'")
-
-#     results = await controller.rerank_with_ocr(
-#         results=request.results,
-#         ocr_query=request.ocr_query,
-#         top_k=request.top_k,
-#         ocr_weight=request.ocr_weight,
-#     )
-
-#     logger.info(f"Found {len(results)} results with OCR reranking")
-
-#     display_results = []
-#     for r in results:
-#         path, score = controller.convert_model_to_path(r)
-#         display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
-#     return KeyframeDisplay(results=display_results, raw_results=results)
-
-
-# @router.post(
-#     "/search/ocr-filter",
-#     response_model=KeyframeDisplay,
-#     summary="Text search with OCR filtering",
-#     description="""
-#     Perform a text-based search for keyframes and then re-rank the results based on an OCR query.
-#     This endpoint first performs a standard text search and then uses a second query
-#     to search the OCR content of the initial results, combining the scores for a final ranking.
-#     """,
-#     response_description="List of matching keyframes, re-ranked with OCR scores"
-# )
-# async def search_keyframes_with_ocr_filter(
-#     request: TextSearchWithOcrRequest,
-#     controller: QueryController = Depends(get_query_controller)
-# ):
-#     """
-#     Search for keyframes with OCR filtering.
-#     """
-#     logger.info(f"Text search with OCR filter: query='{request.query}', ocr_query='{request.ocr_query}'")
-
-#     results = await controller.search_text_with_ocr_filter(
-#         query=request.query,
-#         ocr_query=request.ocr_query,
-#         top_k=request.top_k,
-#         score_threshold=request.score_threshold,
-#         ocr_weight=request.ocr_weight,
-#     )
-
-#     logger.info(f"Found {len(results)} results with OCR filtering")
-
-#     display_results = []
-#     for r in results:
-#         path, score = controller.convert_model_to_path(r)
-#         display_results.append(SingleKeyframeDisplay(path=path, score=score, key=r.key))
-#     return KeyframeDisplay(results=display_results, raw_results=results)
 
 @router.post(
     "/search/exclude-groups",
@@ -291,24 +224,3 @@ async def search_keyframes_selected_groups_videos(
     )
     
     return await _handle_search_response(request, results, controller)
-
-
-@router.post(
-    "/clear-cache",
-    summary="Clear keyframe search cache",
-    description="Clear all cached search results for keyframes.",
-    response_description="Cache cleared confirmation."
-)
-async def clear_cache(
-    controller: QueryController = Depends(get_query_controller)
-):
-    """
-    Clear the cache of keyframe search results.
-    """
-    try:
-        controller.clear_cache()  # hoặc await controller.clear_cache() nếu là async
-        logger.info("Keyframe search cache cleared successfully.")
-        return JSONResponse(content={"status": "success", "message": "Cache cleared successfully"})
-    except Exception as e:
-        logger.error(f"Failed to clear cache: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to clear cache")
