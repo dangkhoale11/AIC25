@@ -111,8 +111,7 @@ async def search_keyframes(
     request: TextSearchRequest,
     controller: QueryController = Depends(get_query_controller)
 ):
-    """
-    Search for keyframes using text query with semantic similarity.
+    """git csemantic similarity.
     """
     logger.info(f"Text search request: query='{request.query}', top_k={request.top_k}, threshold={request.score_threshold}")
     results = await controller.search_text(

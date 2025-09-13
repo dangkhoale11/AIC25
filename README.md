@@ -76,9 +76,9 @@ docker compose up -d
 5. Data Migration 
 OCR isn't used yet
 ```bash
-python migration/embedding_migration.py --file_path <emnedding.pt file>
-python migration/keyframe_migration.py --file_path <id2index.json file path>
-python migration/ocr_migration.py --file_path <ocr_embeddings.pkl> 
+python migration/embedding_migration.py --file_path <emnedding.pt file> --batch <1,2>
+python migration/keyframe_migration.py --file_path <id2index.json file path> --batch <1,2>
+
 ```
 
 6. Run the application
@@ -93,8 +93,7 @@ streamlit run main.py
 
 6.2. Run the Streamlit application
 ```bash
-cd app
-python main.py
+python -m app.main
 ```
 
 

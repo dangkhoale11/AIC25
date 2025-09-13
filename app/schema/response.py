@@ -17,6 +17,11 @@ class SingleKeyframeDisplay(BaseModel):
 
 from typing import List, Optional
 
+class RerankSearchResponse(BaseModel):
+    """Response for a search that includes a reranking step."""
+    results: list[SingleKeyframeDisplay]
+    raw_results: Optional[List[KeyframeServiceReponse]] = None
+    rerank_type: str
 
 class KeyframeDisplay(BaseModel):
     results: list[SingleKeyframeDisplay]
