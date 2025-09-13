@@ -103,7 +103,7 @@ async def search_with_rerank(
         top_k=request.top_k,
         score_threshold=request.score_threshold,
         rerank_type=request.rerank_type,
-        ocr_query=request.ocr_query,
+        # ocr_query=request.ocr_query,
         p_qe=request.p_qe,
         p_dr=request.p_dr,
         m_neighbors=request.m_neighbors,
@@ -128,7 +128,6 @@ async def search_keyframes(
     Search for keyframes using text query with semantic similarity.
     """
     logger.info(f"Text search request: query='{request.query}', top_k={request.top_k}, threshold={request.score_threshold}")
-    
     results = await controller.search_text(
         query=request.query,
         top_k=request.top_k,
@@ -292,3 +291,24 @@ async def search_keyframes_selected_groups_videos(
     )
     
     return await _handle_search_response(request, results, controller)
+
+
+@router.post(
+    "/clear-cache",
+    summary="Clear keyframe search cache",
+    description="Clear all cached search results for keyframes.",
+    response_description="Cache cleared confirmation."
+)
+async def clear_cache(
+    controller: QueryController = Depends(get_query_controller)
+):
+    """
+    Clear the cache of keyframe search results.
+    """
+    try:
+        controller.clear_cache()  # hoặc await controller.clear_cache() nếu là async
+        logger.info("Keyframe search cache cleared successfully.")
+        return JSONResponse(content={"status": "success", "message": "Cache cleared successfully"})
+    except Exception as e:
+        logger.error(f"Failed to clear cache: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to clear cache")

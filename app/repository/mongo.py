@@ -25,6 +25,7 @@ class KeyframeRepository(MongoBaseRepository[BeanieDocument]):
     async def get_keyframe_by_list_of_keys(
         self, keys: list[int]
     ):
+        print(">>> Repo đang dùng collection:", self.collection.__name__)
         result = await self.collection.find({"key": {"$in": keys}}).to_list(length=None)
         return [
             KeyframeInterface(

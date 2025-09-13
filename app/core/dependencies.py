@@ -45,7 +45,7 @@ def get_mongo_settings():
 
 
 def get_batch(batch: int = Query(1, description="The batch number to use (1, 2, or 3)")) -> int:
-    if batch not in [1, 2, 3]:
+    if batch not in [1, 2]:
         raise HTTPException(status_code=400, detail="Invalid batch number. Must be 1, 2, or 3.")
     return batch
 
@@ -59,6 +59,7 @@ def get_service_factory(request: Request, batch: int = Depends(get_batch)) -> Se
             status_code=503, 
             detail=f"Service factory for batch {batch} not initialized. Please check application startup."
         )
+    print(f'Service_factory at {batch}')
     return service_factories[batch]
 
 

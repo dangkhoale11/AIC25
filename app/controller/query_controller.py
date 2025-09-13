@@ -85,7 +85,7 @@ class QueryController:
         m_neighbors: int = 5,
         sim_metric: str = "cosine",
     ):
-        cache_key = f"search_with_rerank_{self.batch}_{query}_{top_k}_{score_threshold}_{rerank_type}_{ocr_query}_{p_qe}_{p_dr}_{m_neighbors}_{sim_metric}"
+        cache_key = f"search_with_rerank_{self.batch}_{query}_{top_k}_{score_threshold}_{rerank_type}_{p_qe}_{p_dr}_{m_neighbors}_{sim_metric}"
         if cache_key in SEARCH_CACHE:
             return SEARCH_CACHE[cache_key]
 

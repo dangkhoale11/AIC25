@@ -204,6 +204,22 @@ elif search_mode == "Search with Group and Video":
         include_videos_input = st.text_input("Video IDs to include", placeholder="e.g., 101, 203")
         include_videos = [int(x.strip()) for x in include_videos_input.split(',') if x.strip()] if include_videos_input else []
 
+
+st.markdown("---")
+st.markdown('### Clear Cache')
+if st.button("🧹 Clear Cache", use_container_width=True):
+    try:
+        clear_endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/cache/clear"
+        response = requests.post(clear_endpoint, timeout=10)
+        if response.status_code == 200:
+            st.success("✅ Cache cleared successfully!")
+            st.session_state.search_results = []
+            st.session_state.raw_search_results = []
+            st.session_state.temporal_results = None
+        else:
+            st.error(f"❌ Failed to clear cache: {response.status_code}")
+    except Exception as e:
+        st.error(f"❌ Error clearing cache: {str(e)}")
 # --- Reranking Options ---
 st.markdown("---")
 use_rerank = st.toggle("✨ Enable GEM Reranking")
