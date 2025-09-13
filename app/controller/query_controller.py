@@ -175,11 +175,6 @@ class QueryController:
                 k for k, v in self.id2index.items()
                 if int(v.split('/')[1]) not in list_of_include_videos
             ]
-
-        elif not list_of_include_groups and not list_of_include_videos:
-            # Không exclude gì cả
-            exclude_ids = []
-
         else:
             # Có cả group lẫn video → loại bỏ những cái không nằm trong cả 2
             exclude_ids = [
