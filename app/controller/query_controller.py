@@ -17,6 +17,7 @@ from schema.response import KeyframeServiceReponse
 from core.translation import TextTranslator
 
 
+
 class QueryController:
     
     def __init__(
@@ -25,7 +26,8 @@ class QueryController:
         id2index_path: Path,
         model_service: ModelService,
         keyframe_service: KeyframeQueryService,
-        temporal_search_service: TemporalSearchService
+        temporal_search_service: TemporalSearchService,
+        batch: int
     ):
         self.data_folder = data_folder
         self.id2index = json.load(open(id2index_path, 'r'))
@@ -33,19 +35,23 @@ class QueryController:
         self.keyframe_service = keyframe_service
         self.temporal_search_service = temporal_search_service
         self.translator = TextTranslator()
+        self.batch = batch
 
     
     def convert_model_to_path(
         self,
         model: KeyframeServiceReponse
     ) -> tuple[str, float]:
+        # chọn prefix dựa trên batch
+        prefix = "L" if self.batch == 1 else "K"
+
         return os.path.join(
             self.data_folder,
-            f"L{model.group_num:02d}",
+            f"{prefix}{model.group_num:02d}",
             f"V{model.video_num:03d}",
             f"{model.keyframe_num:06d}.webp"
         ), model.confidence_score
-    
+        
         
     async def search_text(
         self, 
@@ -53,10 +59,13 @@ class QueryController:
         top_k: int,
         score_threshold: float
     ):
+
+
         translated_query = self.translator.translate(query)
         embedding = self.model_service.embedding(translated_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text(embedding, top_k, score_threshold)
+
         return result
 
 
@@ -66,31 +75,34 @@ class QueryController:
         top_k: int,
         score_threshold: float,
         rerank_type: str,
-        ocr_query: str | None = None,
+        # ocr_query: str | None = None,
         p_qe: float = 3.0,
         p_dr: float = 3.0,
         m_neighbors: int = 5,
         sim_metric: str = "cosine",
     ):
+
+
         translated_query = self.translator.translate(query)
         text_embedding = self.model_service.embedding(translated_query).tolist()[0]
 
-        ocr_embedding = None
-        if rerank_type == "ocr" and ocr_query:
-            translated_ocr_query = self.translator.translate(ocr_query)
-            ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
+        # ocr_embedding = None
+        # if rerank_type == "ocr" and ocr_query:
+        #     translated_ocr_query = self.translator.translate(ocr_query)
+        #     ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
         result = await self.keyframe_service.search_with_rerank(
             text_embedding=text_embedding,
             top_k=top_k,
             score_threshold=score_threshold,
             method=rerank_type,
-            ocr_embedding=ocr_embedding,
+            # ocr_embedding=ocr_embedding,
             p_qe=p_qe,
             p_dr=p_dr,
             m_neighbors=m_neighbors,
             sim_metric=sim_metric,
         )
+
         return result
 
 
@@ -101,6 +113,8 @@ class QueryController:
         score_threshold: float,
         list_group_exlude: list[int]
     ):
+
+
         exclude_ids = [
             int(k) for k, v in self.id2index.items()
             if int(v.split('/')[0]) in list_group_exlude
@@ -111,6 +125,14 @@ class QueryController:
         embedding = self.model_service.embedding(translated_query).tolist()[0]
 
         result = await self.keyframe_service.search_by_text_exclude_ids(embedding, top_k, score_threshold, exclude_ids)
+
+        # Safety filter
+        result = [
+            r for r in result
+            if r.group_num not in list_group_exlude
+        ]
+
+
         return result
 
 
@@ -125,6 +147,7 @@ class QueryController:
         """
         Search keyframes with optional filtering by groups and/or videos.
         """
+
 
         # --- Bước 1: Chuẩn bị exclude_ids (giữ nguyên string key) ---
         exclude_ids: list[str] = []
@@ -142,11 +165,6 @@ class QueryController:
                 k for k, v in self.id2index.items()
                 if int(v.split('/')[1]) not in list_of_include_videos
             ]
-
-        elif not list_of_include_groups and not list_of_include_videos:
-            # Không exclude gì cả
-            exclude_ids = []
-
         else:
             # Có cả group lẫn video → loại bỏ những cái không nằm trong cả 2
             exclude_ids = [
@@ -183,39 +201,39 @@ class QueryController:
 
     
 
-    async def search_text_with_ocr_filter(
-        self,
-        query: str,
-        ocr_query: str,
-        top_k: int,
-        score_threshold: float,
-        ocr_weight: float,
-    ):
-        translated_query = self.translator.translate(query)
-        translated_ocr_query = self.translator.translate(ocr_query)
-        text_embedding = self.model_service.embedding(translated_query).tolist()[0]
-        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
+    # async def search_text_with_ocr_filter(
+    #     self,
+    #     query: str,
+    #     ocr_query: str,
+    #     top_k: int,
+    #     score_threshold: float,
+    #     ocr_weight: float,
+    # ):
+    #     translated_query = self.translator.translate(query)
+    #     translated_ocr_query = self.translator.translate(ocr_query)
+    #     text_embedding = self.model_service.embedding(translated_query).tolist()[0]
+    #     ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
-        result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
-            text_embedding, ocr_embedding, top_k, score_threshold, ocr_weight
-        )
-        return result
+    #     result = await self.keyframe_service.search_by_text_and_filter_with_ocr(
+    #         text_embedding, ocr_embedding, top_k, score_threshold, ocr_weight
+    #     )
+    #     return result
 
 
-    async def rerank_with_ocr(
-        self,
-        results: list[KeyframeServiceReponse],
-        ocr_query: str,
-        top_k: int,
-        ocr_weight: float,
-    ):
-        translated_ocr_query = self.translator.translate(ocr_query)
-        ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
+    # async def rerank_with_ocr(
+    #     self,
+    #     results: list[KeyframeServiceReponse],
+    #     ocr_query: str,
+    #     top_k: int,
+    #     ocr_weight: float,
+    # ):
+    #     translated_ocr_query = self.translator.translate(ocr_query)
+    #     ocr_embedding = self.model_service.embedding_ocr(translated_ocr_query).tolist()
 
-        result = await self.keyframe_service.rerank_by_ocr(
-            results, ocr_embedding, top_k, ocr_weight
-        )
-        return result
+    #     result = await self.keyframe_service.rerank_by_ocr(
+    #         results, ocr_embedding, top_k, ocr_weight
+    #     )
+    #     return result
 
 
     async def search_temporal(
@@ -247,3 +265,6 @@ class QueryController:
                 temporal_events.append({"start_frame": start_frame, "end_frame": end_frame})
 
         return temporal_events
+
+
+

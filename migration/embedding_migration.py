@@ -145,11 +145,12 @@ class MilvusEmbeddingInjector:
 
 def inject_embeddings_simple(
     embedding_file_path: str,
-    setting: KeyFrameIndexMilvusSetting
+    setting: KeyFrameIndexMilvusSetting,
+    collection_name: str
 ):
     injector = MilvusEmbeddingInjector(
         setting=setting,
-        collection_name=setting.COLLECTION_NAME,
+        collection_name=collection_name,
         host=setting.HOST,
         port=setting.PORT
     )
@@ -170,10 +171,15 @@ if __name__ == "__main__":
     parser.add_argument(
         "--file_path", type=str, help="Path to embedding pt."
     )
+    parser.add_argument(
+        "--batch", type=int, default=1, help="Batch number to migrate."
+    )
     args = parser.parse_args()
 
     setting =  KeyFrameIndexMilvusSetting()
+    collection_name = f"keyframe_batch{args.batch}"
     inject_embeddings_simple(
         embedding_file_path=args.file_path,
-        setting=setting
+        setting=setting,
+        collection_name=collection_name
     )

@@ -24,7 +24,7 @@ class IndexPathSettings(BaseSettings):
 
 
 class KeyFrameIndexMilvusSetting(BaseSettings):
-    COLLECTION_NAME: str = "keyframe"
+    COLLECTION_NAME: str = "keyframe_batch1"
     HOST: str = 'localhost'
     PORT: str = '19530'
     METRIC_TYPE: str = 'COSINE'
@@ -33,14 +33,14 @@ class KeyFrameIndexMilvusSetting(BaseSettings):
     SEARCH_PARAMS: dict = {}
 
 
-class OcrIndexMilvusSetting(BaseSettings):
-    COLLECTION_NAME: str = "ocr"
-    HOST: str = 'localhost'
-    PORT: str = '19530'
-    METRIC_TYPE: str = 'COSINE'
-    INDEX_TYPE: str = 'FLAT'
-    BATCH_SIZE: int =10000
-    SEARCH_PARAMS: dict = {}
+# class OcrIndexMilvusSetting(BaseSettings):
+#     COLLECTION_NAME: str = "ocr_batch1"
+#     HOST: str = 'localhost'
+#     PORT: str = '19530'
+#     METRIC_TYPE: str = 'COSINE'
+#     INDEX_TYPE: str = 'FLAT'
+#     BATCH_SIZE: int =10000
+#     SEARCH_PARAMS: dict = {}
 
 
 class AppSettings(BaseSettings):
@@ -48,3 +48,4 @@ class AppSettings(BaseSettings):
     ID2INDEX_PATH: str = "id2index.json"
     MODEL_NAME: str = "hf-hub:laion/CLIP-convnext_xxlarge-laion2B-s34B-b82K-augreg-soup"
     MODEL_OCR_NAME: str = "all-MiniLM-L6-v2"
+    BATCH: int = 1

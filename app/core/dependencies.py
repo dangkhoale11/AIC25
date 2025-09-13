@@ -1,6 +1,6 @@
 
 from pathlib import Path
-from fastapi import Depends, Request, HTTPException
+from fastapi import Depends, Request, HTTPException, Query
 from functools import lru_cache
 import json
 
@@ -44,17 +44,23 @@ def get_mongo_settings():
     return MongoDBSettings()
 
 
+def get_batch(batch: int = Query(1, description="The batch number to use (1, 2, or 3)")) -> int:
+    if batch not in [1, 2]:
+        raise HTTPException(status_code=400, detail="Invalid batch number. Must be 1, 2, or 3.")
+    return batch
 
-def get_service_factory(request: Request) -> ServiceFactory:
-    """Get ServiceFactory from app state"""
-    service_factory = getattr(request.app.state, 'service_factory', None)
-    if service_factory is None:
-        logger.error("ServiceFactory not found in app state")
+
+def get_service_factory(request: Request, batch: int = Depends(get_batch)) -> ServiceFactory:
+    """Get ServiceFactory from app state for the given batch"""
+    service_factories = getattr(request.app.state, 'service_factories', None)
+    if service_factories is None or batch not in service_factories:
+        logger.error(f"ServiceFactory for batch {batch} not found in app state")
         raise HTTPException(
             status_code=503, 
-            detail="Service factory not initialized. Please check application startup."
+            detail=f"Service factory for batch {batch} not initialized. Please check application startup."
         )
-    return service_factory
+    print(f'Service_factory at {batch}')
+    return service_factories[batch]
 
 
 
@@ -161,22 +167,26 @@ def get_query_controller(
     model_service: ModelService = Depends(get_model_service),
     keyframe_service: KeyframeQueryService = Depends(get_keyframe_service),
     temporal_search_service: TemporalSearchService = Depends(get_temporal_search_service),
-    milvus_settings: KeyFrameIndexMilvusSetting = Depends(get_milvus_settings),
-    app_settings: AppSettings = Depends(get_app_settings)
+    app_settings: AppSettings = Depends(get_app_settings),
+    batch: int = Depends(get_batch)
 ) -> QueryController:
     """Get query controller instance"""
     try:
         logger.info("Creating query controller...")
         
-        data_folder = Path(app_settings.DATA_FOLDER)
-        id2index_path = Path(app_settings.ID2INDEX_PATH)
-        print(id2index_path)
+        # Construct batch-specific paths
+        data_folder = Path(app_settings.DATA_FOLDER) / f"batch_{batch}"
+        id2index_path = data_folder / "id2index.json"
+
+        print(f"data_folder: {data_folder}")
+        print(f"id2index_path: {id2index_path}")
         if not data_folder.exists():
             logger.warning(f"Data folder does not exist: {data_folder}")
             data_folder.mkdir(parents=True, exist_ok=True)
             
         if not id2index_path.exists():
             logger.warning(f"ID2Index file does not exist: {id2index_path}")
+            # Ensure parent directory exists
             id2index_path.parent.mkdir(parents=True, exist_ok=True)
             with open(id2index_path, 'w') as f:
                 json.dump({}, f)
@@ -186,7 +196,8 @@ def get_query_controller(
             id2index_path=id2index_path,
             model_service=model_service,
             keyframe_service=keyframe_service,
-            temporal_search_service=temporal_search_service
+            temporal_search_service=temporal_search_service,
+            batch=batch
         )
         
         logger.info("Query controller created successfully")

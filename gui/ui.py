@@ -172,11 +172,13 @@ query = st.text_input(
     placeholder="Enter your search query (e.g., 'person walking in the park')",
 )
 
-col1, col2 = st.columns(2)
+col1, col2, col3 = st.columns(3)
 with col1:
     top_k = st.slider("📊 Max Results", 1, 500, 10) # Increased max for wider temporal search range
 with col2:
     score_threshold = st.slider("🎯 Min Score", 0.0, 1.0, 0.0, 0.1)
+with col3:
+    batch = st.selectbox("Batch", [1, 2, 3], index=0)
 
 # --- Search Modes ---
 st.markdown("---")
@@ -202,6 +204,22 @@ elif search_mode == "Search with Group and Video":
         include_videos_input = st.text_input("Video IDs to include", placeholder="e.g., 101, 203")
         include_videos = [int(x.strip()) for x in include_videos_input.split(',') if x.strip()] if include_videos_input else []
 
+
+st.markdown("---")
+st.markdown('### Clear Cache')
+if st.button("🧹 Clear Cache", use_container_width=True):
+    try:
+        clear_endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/cache/clear"
+        response = requests.post(clear_endpoint, timeout=10)
+        if response.status_code == 200:
+            st.success("✅ Cache cleared successfully!")
+            st.session_state.search_results = []
+            st.session_state.raw_search_results = []
+            st.session_state.temporal_results = None
+        else:
+            st.error(f"❌ Failed to clear cache: {response.status_code}")
+    except Exception as e:
+        st.error(f"❌ Error clearing cache: {str(e)}")
 # --- Reranking Options ---
 st.markdown("---")
 use_rerank = st.toggle("✨ Enable GEM Reranking")
@@ -234,21 +252,23 @@ if st.button("🚀 Search", use_container_width=True):
     else:
         with st.spinner("🔍 Searching..."):
             # Determine endpoint and base payload
+            base_endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe"
+
             if use_rerank:
-                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/rerank"
+                endpoint = f"{base_endpoint}/search/rerank?batch={batch}"
                 payload = {
                     "query": query, "top_k": top_k, "score_threshold": score_threshold,
                     "rerank_type": "GEM", "p_qe": p_qe, "p_dr": p_dr,
                     "m_neighbors": m_neighbors, "sim_metric": sim_metric,
                 }
             elif search_mode == "Normal Search":
-                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search"
+                endpoint = f"{base_endpoint}/search?batch={batch}"
                 payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold}
             elif search_mode == "Search with Exclude Group":
-                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/exclude-groups"
+                endpoint = f"{base_endpoint}/search/exclude-groups?batch={batch}"
                 payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "exclude_groups": exclude_groups}
             elif search_mode =="Search with Group and Video": # Search with Group and Video
-                endpoint = f"{st.session_state.api_base_url}/api/v1/keyframe/search/selected-groups-videos"
+                endpoint = f"{base_endpoint}/search/selected-groups-videos?batch={batch}"
                 payload = {"query": query, "top_k": top_k, "score_threshold": score_threshold, "include_groups": include_groups, "include_videos": include_videos}
 
             # Add temporal search parameters if enabled
